@@ -179,6 +179,19 @@ def test_dashboard_editable_wiring():
     print("PASS test_dashboard_editable_wiring")
 
 
+def test_dashboard_json_embedding_escaped():
+    # User-editable action_plan flows into the embedded <script>DATA. json.dumps
+    # does NOT escape </script>, so a raw payload could break out of the script
+    # tag (stored XSS). _build_html must \u-escape < > & before embedding.
+    import json
+    payload = [{"week_label": "W01/2026", "run_date": "2026-01-01 09:00",
+                "errors": [{"id": 1, "action_plan": "</script><script>x"}]}]
+    html = dashboard._build_html(json.dumps(payload, ensure_ascii=False), payload)
+    assert "</script><script>x" not in html, "raw script breakout embedded"
+    assert "\\u003c/script\\u003e" in html, "payload not unicode-escaped"
+    print("PASS test_dashboard_json_embedding_escaped")
+
+
 if __name__ == "__main__":
     test_schema_has_action_plan_and_audit()
     test_latest_action_plan_map()
@@ -187,4 +200,5 @@ if __name__ == "__main__":
     test_enrich_action_plan_materializes()
     test_api_get_and_post_validation()
     test_dashboard_editable_wiring()
+    test_dashboard_json_embedding_escaped()
     print("\nALL EDITABLE TESTS PASSED")

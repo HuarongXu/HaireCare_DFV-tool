@@ -40,7 +40,15 @@ def generate_dashboard():
 def _build_html(data_json, runs):
     # Use string.replace instead of f-string to avoid brace escaping issues
     template = _get_template()
-    return template.replace('__DATA_JSON__', data_json)
+    # Harden JSON embedded in <script>: json.dumps does not escape </script>,
+    # so user-editable fields (owner/action_plan) could break out of the script
+    # tag (stored XSS). \u-escapes are equivalent inside JSON string literals.
+    safe = (data_json.replace('&', '\\u0026')
+                     .replace('<', '\\u003c')
+                     .replace('>', '\\u003e')
+                     .replace('\u2028', '\\u2028')
+                     .replace('\u2029', '\\u2029'))
+    return template.replace('__DATA_JSON__', safe)
 
 
 def _get_template():
