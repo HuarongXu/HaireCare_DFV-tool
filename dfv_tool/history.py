@@ -57,11 +57,23 @@ def init_db():
             first_time TEXT,
             duration INTEGER,
             priority TEXT,
+            action_plan TEXT,
             FOREIGN KEY (run_id) REFERENCES runs(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            ip TEXT,
+            error_id INTEGER,
+            field TEXT,
+            old_value TEXT,
+            new_value TEXT
         );
     """)
     # Migrations for existing DBs (CREATE TABLE IF NOT EXISTS won't add columns).
-    for col, decl in (("first_time", "TEXT"), ("duration", "INTEGER"), ("priority", "TEXT")):
+    for col, decl in (("first_time", "TEXT"), ("duration", "INTEGER"),
+                      ("priority", "TEXT"), ("action_plan", "TEXT")):
         try:
             conn.execute(f"ALTER TABLE errors ADD COLUMN {col} {decl}")
         except sqlite3.OperationalError:
