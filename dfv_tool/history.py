@@ -260,6 +260,47 @@ def get_all_data():
     return runs
 
 
+def update_error_fields(error_id, owner=None, action_plan=None, ip=None):
+    """Update owner and/or action_plan for one error row; record an audit
+    entry per changed field. Returns number of error rows updated (0 or 1).
+
+    All SQL is parameterized and the SET columns come from a fixed code-side
+    whitelist (owner/action_plan), never from request input. Callers (app
+    layer) MUST validate types/lengths before calling; this layer trusts
+    already-validated values.
+    """
+    fields = {}
+    if owner is not None:
+        fields["owner"] = owner
+    if action_plan is not None:
+        fields["action_plan"] = action_plan
+    if not fields:
+        return 0
+
+    conn = _get_conn()
+    old = conn.execute(
+        "SELECT owner, action_plan FROM errors WHERE id = ?", (error_id,)
+    ).fetchone()
+    if old is None:
+        conn.close()
+        return 0
+
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    params = list(fields.values()) + [error_id]
+    conn.execute(f"UPDATE errors SET {set_clause} WHERE id = ?", params)
+
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for field, new_val in fields.items():
+        conn.execute(
+            "INSERT INTO audit_log (ts, ip, error_id, field, old_value, new_value) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (ts, ip, error_id, field, old[field], new_val),
+        )
+    conn.commit()
+    conn.close()
+    return 1
+
+
 def update_owners(mapping, run_id=None):
     """
     Batch update owners in the DB.
