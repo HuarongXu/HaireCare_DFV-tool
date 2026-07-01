@@ -144,6 +144,11 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
 .tag-mid { background:#fef3c7; color:#92400e; }
 .tag-low { background:#dcfce7; color:#166534; }
 .no-actions { text-align:center; padding:48px; color:var(--text3); font-size:1.05em; }
+.action-table td.editable { background:#fffef5; cursor:text; outline:none; min-width:120px; }
+.action-table td.editable:focus { box-shadow:inset 0 0 0 2px var(--primary); }
+.action-table td.saving { background:#fef9c3; }
+.action-table td.save-ok { background:#dcfce7; }
+.action-table td.save-err { background:#fee2e2; }
 .copy-btn { padding:8px 16px; background:var(--primary); color:#fff; border:none; border-radius:8px;
             cursor:pointer; font-size:.8em; font-weight:600; margin-left:auto; transition:all .15s;
             box-shadow:0 2px 6px rgba(37,99,235,.25); }
@@ -217,6 +222,33 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
 
 <script>
 var DATA = __DATA_JSON__;
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function saveCell(cell) {
+  var id = cell.getAttribute("data-id");
+  var field = cell.getAttribute("data-field");
+  var val = cell.innerText.trim();
+  cell.classList.remove("save-ok", "save-err");
+  cell.classList.add("saving");
+  var body = {}; body[field] = val;
+  fetch("/api/errors/" + id, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)
+  }).then(function(r) {
+    cell.classList.remove("saving");
+    if (r.ok) { cell.classList.add("save-ok"); }
+    else { cell.classList.add("save-err"); alert("Save failed (" + r.status + ")"); }
+  }).catch(function() {
+    cell.classList.remove("saving"); cell.classList.add("save-err");
+    alert("Save failed (network)");
+  });
+}
 
 var picker = document.getElementById("weekPicker");
 for (var i = 0; i < DATA.length; i++) {
@@ -382,28 +414,31 @@ function renderActions(errors) {
 
   var html = '<table class="action-table" id="actionTable"><thead><tr>' +
     '<th>Product</th><th>Description</th><th>Brand</th><th>Location</th><th>Error</th>' +
-    '<th>Forecast</th><th>Reason</th><th>Action</th><th>Owner</th>' +
+    '<th>Forecast</th><th>Reason</th><th>Action</th><th>Action Plan</th><th>Owner</th>' +
     '<th>First Time</th><th>Duration</th><th>Priority</th>' +
     '</tr></thead><tbody>';
 
   for (var k = 0; k < filtered.length; k++) {
     var e = filtered[k];
-    var ownerTag = e.owner.indexOf("IOL") >= 0 ? "tag-iol" :
-                   e.owner.indexOf("DP") >= 0 ? "tag-dp" : "tag-drp";
     var fcst = Math.round(e.idp_forecast).toLocaleString();
     html += '<tr>' +
-      '<td><strong>' + e.apo_product + '</strong></td>' +
-      '<td>' + (e.description || "") + '</td>' +
-      '<td>' + (e.brand || "") + '</td>' +
-      '<td>' + e.apo_location + '</td>' +
-      '<td>' + e.error_message + '</td>' +
+      '<td><strong>' + escapeHtml(e.apo_product) + '</strong></td>' +
+      '<td>' + escapeHtml(e.description) + '</td>' +
+      '<td>' + escapeHtml(e.brand) + '</td>' +
+      '<td>' + escapeHtml(e.apo_location) + '</td>' +
+      '<td>' + escapeHtml(e.error_message) + '</td>' +
       '<td style="text-align:right">' + fcst + '</td>' +
-      '<td>' + e.reason + '</td>' +
-      '<td><strong>' + e.action + '</strong></td>' +
-      '<td class="owner-cell"><span class="tag ' + ownerTag + '">' + e.owner + '</span></td>' +
-      '<td class="owner-cell">' + (e.first_time || "") + '</td>' +
+      '<td>' + escapeHtml(e.reason) + '</td>' +
+      '<td><strong>' + escapeHtml(e.action) + '</strong></td>' +
+      '<td class="editable" contenteditable="true" data-id="' + e.id +
+        '" data-field="action_plan" onblur="saveCell(this)">' +
+        escapeHtml(e.action_plan) + '</td>' +
+      '<td class="owner-cell editable" contenteditable="true" data-id="' + e.id +
+        '" data-field="owner" onblur="saveCell(this)">' +
+        escapeHtml(e.owner) + '</td>' +
+      '<td class="owner-cell">' + escapeHtml(e.first_time) + '</td>' +
       '<td style="text-align:center">' + (e.duration != null ? e.duration : "") + '</td>' +
-      '<td style="text-align:center">' + (e.priority ? '<span class="tag ' + (e.priority === "High" ? "tag-high" : e.priority === "Mid" ? "tag-mid" : "tag-low") + '">' + e.priority + '</span>' : "") + '</td>' +
+      '<td style="text-align:center">' + (e.priority ? '<span class="tag ' + (e.priority === "High" ? "tag-high" : e.priority === "Mid" ? "tag-mid" : "tag-low") + '">' + escapeHtml(e.priority) + '</span>' : "") + '</td>' +
       '</tr>';
   }
   html += '</tbody></table>';
