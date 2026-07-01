@@ -249,6 +249,24 @@ def enrich_first_seen(errors):
     return errors
 
 
+def enrich_action_plan(errors):
+    """Materialize each row's Action_Plan from history by (APO_Product,
+    APO_Location). Brand-new code/plant (no history) gets an empty string.
+    Runs before save_run so the reused plan is persisted into the new run.
+    """
+    if errors.empty:
+        return errors
+    from history import get_latest_action_plan_map
+    latest = get_latest_action_plan_map()
+
+    def pick(row):
+        key = (str(row["APO_Product"]), str(row["APO_Location"]))
+        return latest.get(key, "")
+
+    errors["Action_Plan"] = errors.apply(pick, axis=1)
+    return errors
+
+
 def generate_summary(df, errors):
     """Generate summary statistics with two KPIs:
     1. 18 Months volume difference (target < 2%)
@@ -434,6 +452,9 @@ def run_pipeline(csv_path=None):
 
     # Enrich with first-appearance week + duration (from history)
     errors = enrich_first_seen(errors)
+
+    # Carry forward the last non-empty action plan for each code/plant.
+    errors = enrich_action_plan(errors)
 
     # Summary
     summary = generate_summary(df, errors)
