@@ -136,13 +136,14 @@ def save_run(summary, errors_df):
                 r.get("First_Time", ""),
                 int(r.get("Duration", 0)) if str(r.get("Duration", "")) != "" else None,
                 r.get("Priority", ""),
+                r.get("Action_Plan", ""),
             ))
         conn.executemany("""
             INSERT INTO errors (run_id, file_id, apo_product, description, category,
                                 brand, apo_location, snp_planner, error_message,
                                 idp_forecast, apo_forecast, reason, action, owner, is_hktw,
-                                first_time, duration, priority)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                first_time, duration, priority, action_plan)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, rows)
 
     conn.commit()
