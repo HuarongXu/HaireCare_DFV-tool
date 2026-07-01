@@ -192,6 +192,18 @@ def test_dashboard_json_embedding_escaped():
     print("PASS test_dashboard_json_embedding_escaped")
 
 
+def test_dashboard_owner_filter_escaped():
+    # Owner filter buttons are built client-side from user-editable owner values.
+    # The label and the click argument must not concatenate raw owner text into
+    # innerHTML/onclick (stored XSS). Enforce escapeHtml + data-owner delegation.
+    t = dashboard._get_template()
+    assert "escapeHtml(owners[j])" in t, "owner filter label/attr not escaped"
+    assert "data-owner=" in t, "owner filter not using data-owner delegation"
+    assert "setFilter(&quot;' + esc" not in t, "raw owner still inlined into onclick"
+    assert "'\">' + owners[j] +" not in t, "raw owner still used as button label"
+    print("PASS test_dashboard_owner_filter_escaped")
+
+
 if __name__ == "__main__":
     test_schema_has_action_plan_and_audit()
     test_latest_action_plan_map()
@@ -201,4 +213,5 @@ if __name__ == "__main__":
     test_api_get_and_post_validation()
     test_dashboard_editable_wiring()
     test_dashboard_json_embedding_escaped()
+    test_dashboard_owner_filter_escaped()
     print("\nALL EDITABLE TESTS PASSED")

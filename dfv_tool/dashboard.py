@@ -382,13 +382,17 @@ function renderActions(errors) {
   if (currentFilter !== "all" && owners.indexOf(currentFilter) < 0) currentFilter = "all";
 
   var fhtml = '<button class="' + (currentFilter === "all" ? "active" : "") +
-    '" onclick="setFilter(&quot;all&quot;)">All</button>';
+    '" data-owner="all">All</button>';
   for (var j = 0; j < owners.length; j++) {
-    var esc = owners[j].replace(/"/g, "&quot;");
     fhtml += '<button class="' + (currentFilter === owners[j] ? "active" : "") +
-      '" onclick="setFilter(&quot;' + esc + '&quot;)">' + owners[j] + '</button>';
+      '" data-owner="' + escapeHtml(owners[j]) + '">' + escapeHtml(owners[j]) + '</button>';
   }
-  document.getElementById("ownerFilters").innerHTML = fhtml;
+  var ownerFilters = document.getElementById("ownerFilters");
+  ownerFilters.innerHTML = fhtml;
+  var ownerBtns = ownerFilters.getElementsByTagName("button");
+  for (var k = 0; k < ownerBtns.length; k++) {
+    ownerBtns[k].onclick = function() { setFilter(this.getAttribute("data-owner")); };
+  }
 
   // Priority quick-filter buttons + summary charts reflect the current owner selection.
   var ownerScoped = currentFilter === "all" ? errors :
