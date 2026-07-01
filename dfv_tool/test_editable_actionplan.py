@@ -179,6 +179,50 @@ def test_dashboard_editable_wiring():
     print("PASS test_dashboard_editable_wiring")
 
 
+def test_dashboard_owner_lock_and_column_order():
+    t = dashboard._get_template()
+    # Owner + Action Plan columns moved to AFTER Priority; Action Plan is last.
+    order = t.find("<th>Priority</th>")
+    ap = t.find("<th>Action Plan</th>")
+    ow = t.find("<th>Owner</th>")
+    assert order != -1 and ap != -1 and ow != -1, "headers missing"
+    assert ow > order and ap > order, "Owner/Action Plan not after Priority"
+    assert ap > ow, "Action Plan must be the last column (after Owner)"
+    # Owner + Action Plan editing is gated behind a single toggle (locked by default).
+    assert "editEnabled" in t, "edit lock state missing"
+    assert "function toggleOwnerEdit" in t, "edit toggle missing"
+    assert 'id="ownerEditToggle"' in t, "toggle button missing"
+    assert "var editEnabled = false" in t, "editing must default locked"
+    # Both editable cells are gated by the toggle.
+    assert t.count("editEnabled ?") >= 2, "action_plan/owner cells not both gated by toggle"
+    # New owner names propagate into the filter after save.
+    assert "function applyOwnerEdit" in t, "owner->filter refresh missing"
+    print("PASS test_dashboard_owner_lock_and_column_order")
+
+
+def test_dashboard_inline_js_syntax_ok():
+    # A broken edit to the inline <script> silently blanks the whole dashboard
+    # (all charts + table). Guard the generated JS with a real parser when node
+    # is available; skip cleanly if it is not.
+    import re, shutil, subprocess, tempfile, os
+    node = shutil.which("node")
+    if not node:
+        print("SKIP test_dashboard_inline_js_syntax_ok (node not found)")
+        return
+    html = dashboard._get_template()
+    blocks = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", html, re.S)
+    js = "\n;\n".join(blocks).replace("__DATA_JSON__", "[]")
+    fd, path = tempfile.mkstemp(suffix=".js")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(js)
+        r = subprocess.run([node, "--check", path], capture_output=True, text=True)
+        assert r.returncode == 0, "inline JS syntax error:\n" + r.stderr
+    finally:
+        os.remove(path)
+    print("PASS test_dashboard_inline_js_syntax_ok")
+
+
 def test_dashboard_json_embedding_escaped():
     # User-editable action_plan flows into the embedded <script>DATA. json.dumps
     # does NOT escape </script>, so a raw payload could break out of the script
@@ -212,6 +256,8 @@ if __name__ == "__main__":
     test_enrich_action_plan_materializes()
     test_api_get_and_post_validation()
     test_dashboard_editable_wiring()
+    test_dashboard_owner_lock_and_column_order()
+    test_dashboard_inline_js_syntax_ok()
     test_dashboard_json_embedding_escaped()
     test_dashboard_owner_filter_escaped()
     print("\nALL EDITABLE TESTS PASSED")

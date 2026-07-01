@@ -157,6 +157,10 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
 .action-table td.saving { background:#fef9c3; }
 .action-table td.save-ok { background:#dcfce7; }
 .action-table td.save-err { background:#fee2e2; }
+.edit-toggle { padding:6px 12px; background:#fff; color:var(--primary); border:1px solid var(--primary);
+               border-radius:8px; cursor:pointer; font-size:.78em; font-weight:600; transition:all .15s; }
+.edit-toggle:hover { background:#f1f5f9; }
+.edit-toggle.on { background:var(--primary); color:#fff; }
 .copy-btn { padding:8px 16px; background:var(--primary); color:#fff; border:none; border-radius:8px;
             cursor:pointer; font-size:.8em; font-weight:600; margin-left:auto; transition:all .15s;
             box-shadow:0 2px 6px rgba(37,99,235,.25); }
@@ -224,6 +228,7 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
   <div class="toolbar">
     <div class="filter-group"><span class="filter-label">Priority</span><div class="filters" id="priorityFilters"></div></div>
     <div class="filter-group"><span class="filter-label">Owner</span><div class="filters" id="ownerFilters"></div></div>
+    <div class="filter-group"><button id="ownerEditToggle" class="edit-toggle" onclick="toggleOwnerEdit()">&#128274; 允许编辑</button></div>
   </div>
   <div class="table-wrap" id="actionTableWrap"></div>
 </div>
@@ -250,12 +255,40 @@ function saveCell(cell) {
     body: JSON.stringify(body)
   }).then(function(r) {
     cell.classList.remove("saving");
-    if (r.ok) { cell.classList.add("save-ok"); }
+    if (r.ok) {
+      cell.classList.add("save-ok");
+      if (field === "owner") { applyOwnerEdit(id, val); }
+    }
     else { cell.classList.add("save-err"); alert("Save failed (" + r.status + ")"); }
   }).catch(function() {
     cell.classList.remove("saving"); cell.classList.add("save-err");
     alert("Save failed (network)");
   });
+}
+
+// Owner + Action Plan editing is locked by default to avoid accidental edits;
+// a toolbar toggle unlocks both.
+var editEnabled = false;
+function toggleOwnerEdit() {
+  editEnabled = !editEnabled;
+  var btn = document.getElementById("ownerEditToggle");
+  if (btn) {
+    btn.textContent = editEnabled ? "🔓 可编辑（点此锁定）" : "🔒 允许编辑";
+    btn.classList.toggle("on", editEnabled);
+  }
+  var idx = document.getElementById("weekPicker").value;
+  renderActions((DATA[idx] && DATA[idx].errors) || []);
+}
+
+// After an owner is saved, reflect the (possibly new) name in the in-memory data
+// so the Owner filter list includes it and no rows are hidden/missed.
+function applyOwnerEdit(id, val) {
+  var idx = document.getElementById("weekPicker").value;
+  var errs = (DATA[idx] && DATA[idx].errors) || [];
+  for (var i = 0; i < errs.length; i++) {
+    if (String(errs[i].id) === String(id)) { errs[i].owner = val; break; }
+  }
+  renderActions(errs);
 }
 
 var picker = document.getElementById("weekPicker");
@@ -426,8 +459,9 @@ function renderActions(errors) {
 
   var html = '<table class="action-table" id="actionTable"><thead><tr>' +
     '<th>Product</th><th>Description</th><th>Brand</th><th>Location</th><th>Error</th>' +
-    '<th>Forecast</th><th>Reason</th><th>Action</th><th>Action Plan</th><th>Owner</th>' +
+    '<th>Forecast</th><th>Reason</th><th>Action</th>' +
     '<th>First Time</th><th>Duration</th><th>Priority</th>' +
+    '<th>Owner</th><th>Action Plan</th>' +
     '</tr></thead><tbody>';
 
   for (var k = 0; k < filtered.length; k++) {
@@ -442,15 +476,15 @@ function renderActions(errors) {
       '<td style="text-align:right">' + fcst + '</td>' +
       '<td>' + escapeHtml(e.reason) + '</td>' +
       '<td><strong>' + escapeHtml(e.action) + '</strong></td>' +
-      '<td class="editable" contenteditable="true" data-id="' + e.id +
-        '" data-field="action_plan" onblur="saveCell(this)">' +
-        escapeHtml(e.action_plan) + '</td>' +
-      '<td class="owner-cell editable" contenteditable="true" data-id="' + e.id +
-        '" data-field="owner" onblur="saveCell(this)">' +
-        escapeHtml(e.owner) + '</td>' +
       '<td class="owner-cell">' + escapeHtml(e.first_time) + '</td>' +
       '<td style="text-align:center">' + (e.duration != null ? e.duration : "") + '</td>' +
       '<td style="text-align:center">' + (e.priority ? '<span class="tag ' + (e.priority === "High" ? "tag-high" : e.priority === "Mid" ? "tag-mid" : "tag-low") + '">' + escapeHtml(e.priority) + '</span>' : "") + '</td>' +
+      '<td class="owner-cell' + (editEnabled ? ' editable" contenteditable="true" onblur="saveCell(this)' : '') +
+        '" data-id="' + e.id + '" data-field="owner">' +
+        escapeHtml(e.owner) + '</td>' +
+      '<td class="' + (editEnabled ? 'editable" contenteditable="true" onblur="saveCell(this)' : '') +
+        '" data-id="' + e.id + '" data-field="action_plan">' +
+        escapeHtml(e.action_plan) + '</td>' +
       '</tr>';
   }
   html += '</tbody></table>';
