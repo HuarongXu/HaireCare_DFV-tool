@@ -188,6 +188,30 @@ def get_first_seen_map():
     return {(str(row["p"]), str(row["l"])): row["first_date"] for row in rows}
 
 
+def get_latest_action_plan_map():
+    """Return {(apo_product, apo_location): most-recent non-empty action_plan}.
+
+    Keyed by string product/location so callers match regardless of numeric
+    vs text types (mirrors get_first_seen_map). "Most recent" = the non-empty
+    action_plan from the run with the largest run_date.
+    """
+    init_db()
+    conn = _get_conn()
+    rows = conn.execute("""
+        SELECT e.apo_product AS p, e.apo_location AS l,
+               e.action_plan AS ap, r.run_date AS rd
+        FROM errors e JOIN runs r ON e.run_id = r.id
+        WHERE e.action_plan IS NOT NULL AND e.action_plan <> ''
+        ORDER BY r.run_date ASC
+    """).fetchall()
+    conn.close()
+    # ASC order means later rows overwrite earlier -> last (most recent) wins.
+    result = {}
+    for row in rows:
+        result[(str(row["p"]), str(row["l"]))] = row["ap"]
+    return result
+
+
 def delete_runs(run_ids):
     """Delete one or more runs (and all their error rows) by run id.
 
