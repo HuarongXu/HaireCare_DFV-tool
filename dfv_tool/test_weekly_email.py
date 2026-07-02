@@ -115,6 +115,15 @@ def test_load_recipients_missing_returns_blank():
     print("PASS test_load_recipients_missing_returns_blank")
 
 
+def test_open_draft_never_sends():
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "email_report.py"),
+               encoding="utf-8").read()
+    assert ".Send(" not in src, "email_report must never call .Send()"
+    assert ".Display(" in src, "open_outlook_draft must use .Display()"
+    assert hasattr(email_report, "open_outlook_draft"), "open_outlook_draft missing"
+    print("PASS test_open_draft_never_sends")
+
+
 if __name__ == "__main__":
     test_build_email_subject_and_intro()
     test_build_email_table_columns_order()
@@ -124,4 +133,5 @@ if __name__ == "__main__":
     test_build_email_owner_summary_bold()
     test_load_recipients_reads_file()
     test_load_recipients_missing_returns_blank()
+    test_open_draft_never_sends()
     print("\nALL WEEKLY EMAIL TESTS PASSED")

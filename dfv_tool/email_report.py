@@ -3,7 +3,7 @@ Weekly DFV report email.
 
 Split into a pure HTML builder (`build_weekly_email`) that is fully unit-testable
 without Outlook, and a thin COM wrapper (`open_outlook_draft`) that opens the mail
-as a DRAFT only. This module NEVER calls .Send() — the user reviews and sends in
+as a DRAFT only. This module never triggers a send — the user reviews and sends in
 Outlook themselves (see specs/weekly-report-email/spec.md, R10).
 """
 import html as _html
@@ -131,3 +131,17 @@ def load_recipients(path=_CONFIG_PATH):
     except (ValueError, OSError) as e:
         log.warning("email_config.json unreadable (%s); recipients left blank", e)
         return {"to": [], "cc": []}
+
+
+def open_outlook_draft(subject, to, cc, html):
+    """Open an Outlook draft (never send). win32com is imported lazily so unit
+    tests and non-Windows tooling don't require Outlook to import this module.
+    Raises on COM failure; the caller maps that to an HTTP 500 (R13)."""
+    import win32com.client  # lazy import (R11/R13)
+    outlook = win32com.client.Dispatch("Outlook.Application")
+    mail = outlook.CreateItem(0)  # 0 = olMailItem
+    mail.Subject = subject
+    mail.To = "; ".join(to or [])
+    mail.CC = "; ".join(cc or [])
+    mail.HTMLBody = html
+    mail.Display(False)  # open as editable draft only — this module never sends
