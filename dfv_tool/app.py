@@ -15,6 +15,7 @@ from flask import Flask, request, jsonify, Response
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import history
 from dashboard import _build_html
+import email_report
 
 OWNER_MAX = 200
 ACTION_PLAN_MAX = 2000
@@ -77,6 +78,35 @@ def create_app():
         if n == 0:
             return jsonify({"error": "not found"}), 404
         return jsonify({"id": error_id, **fields})
+
+    def _prev_run(runs, run):
+        """runs is DESC by run_date (as get_all_data returns). Previous week is
+        the next-older run in that list, or None if this is the earliest."""
+        for i, r in enumerate(runs):
+            if r["id"] == run["id"]:
+                return runs[i + 1] if i + 1 < len(runs) else None
+        return None
+
+    @app.post("/api/email/weekly")
+    def email_weekly():
+        data = request.get_json(silent=True) or {}
+        run_id = data.get("run_id")
+        if not isinstance(run_id, int):
+            return jsonify({"ok": False, "error": "run_id (int) required"}), 400
+        runs = history.get_all_data()
+        run = next((r for r in runs if r["id"] == run_id), None)
+        if run is None:
+            return jsonify({"ok": False, "error": "run not found"}), 404
+        subject, html = email_report.build_weekly_email(run, _prev_run(runs, run))
+        recips = email_report.load_recipients()
+        try:
+            email_report.open_outlook_draft(subject, recips["to"], recips["cc"], html)
+        except Exception as e:  # COM/system failure -> 500 (R13)
+            app.logger.exception("weekly email draft failed run_id=%s", run_id)
+            return jsonify({"ok": False, "error": str(e)}), 500
+        # Audit: no recipient PII in the log line (R14).
+        app.logger.info("weekly email draft opened run_id=%s ip=%s", run_id, request.remote_addr)
+        return jsonify({"ok": True, "subject": subject})
 
     return app
 

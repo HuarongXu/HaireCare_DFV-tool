@@ -12,6 +12,8 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import email_report
+import history
+import app as app_module
 
 
 def _run(**kw):
@@ -124,6 +126,51 @@ def test_open_draft_never_sends():
     print("PASS test_open_draft_never_sends")
 
 
+def _client(monkeypatch_runs, draft_stub):
+    """Build a Flask test client with history.get_all_data and the Outlook COM
+    call replaced. Returns a client; draft_stub records/handles draft invocations."""
+    history.get_all_data = lambda: monkeypatch_runs           # simple stub
+    email_report.open_outlook_draft = draft_stub
+    return app_module.create_app().test_client()
+
+
+def test_endpoint_generates_draft_200():
+    calls = []
+    runs = [_run(id=2, run_date="2026-06-30 11:53", errors=[_err(duration=5)]),
+            _run(id=1, run_date="2026-06-23 10:00", errors=[_err(), _err()])]
+    client = _client(runs, lambda *a, **k: calls.append(a))
+    r = client.post("/api/email/weekly", json={"run_id": 2})
+    assert r.status_code == 200, r.status_code
+    assert r.get_json()["ok"] is True, r.get_json()
+    assert r.get_json()["subject"] == "GC HC DFV Weekly Result-20260630", r.get_json()
+    assert len(calls) == 1, "draft not opened exactly once"
+    print("PASS test_endpoint_generates_draft_200")
+
+
+def test_endpoint_bad_run_id_404():
+    client = _client([_run(id=2)], lambda *a, **k: None)
+    r = client.post("/api/email/weekly", json={"run_id": 999})
+    assert r.status_code == 404, r.status_code
+    print("PASS test_endpoint_bad_run_id_404")
+
+
+def test_endpoint_missing_run_id_400():
+    client = _client([_run(id=2)], lambda *a, **k: None)
+    r = client.post("/api/email/weekly", json={})
+    assert r.status_code == 400, r.status_code
+    print("PASS test_endpoint_missing_run_id_400")
+
+
+def test_endpoint_com_failure_500():
+    def boom(*a, **k):
+        raise RuntimeError("Outlook not installed")
+    client = _client([_run(id=2, errors=[_err()])], boom)
+    r = client.post("/api/email/weekly", json={"run_id": 2})
+    assert r.status_code == 500, r.status_code
+    assert r.get_json()["ok"] is False, r.get_json()
+    print("PASS test_endpoint_com_failure_500")
+
+
 if __name__ == "__main__":
     test_build_email_subject_and_intro()
     test_build_email_table_columns_order()
@@ -134,4 +181,8 @@ if __name__ == "__main__":
     test_load_recipients_reads_file()
     test_load_recipients_missing_returns_blank()
     test_open_draft_never_sends()
+    test_endpoint_generates_draft_200()
+    test_endpoint_bad_run_id_404()
+    test_endpoint_missing_run_id_400()
+    test_endpoint_com_failure_500()
     print("\nALL WEEKLY EMAIL TESTS PASSED")
