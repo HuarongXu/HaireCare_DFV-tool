@@ -124,8 +124,9 @@ def create_app():
             image_cid = "dashboard"
             inline_images = [(image_cid, png_bytes)]
 
+        dash_url = email_report.load_dashboard_url(request.host_url)
         subject, html = email_report.build_weekly_email(
-            run, _prev_run(runs, run), image_cid=image_cid)
+            run, _prev_run(runs, run), image_cid=image_cid, dashboard_url=dash_url)
         recips = email_report.load_recipients()
         try:
             email_report.open_outlook_draft(
@@ -137,6 +138,17 @@ def create_app():
         app.logger.info("weekly email draft opened run_id=%s ip=%s has_shot=%s",
                         run_id, request.remote_addr, image_cid is not None)
         return jsonify({"ok": True, "subject": subject})
+
+    @app.get("/manual")
+    def manual():
+        # DFV_Manual.html lives at the repo root (one level above dfv_tool/).
+        manual_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "DFV_Manual.html")
+        try:
+            with open(manual_path, "r", encoding="utf-8") as f:
+                return Response(f.read(), mimetype="text/html")
+        except OSError:
+            return Response("Manual not found", status=404, mimetype="text/plain")
 
     return app
 

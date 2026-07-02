@@ -55,16 +55,23 @@ def test_build_email_subject_and_intro():
     print("PASS test_build_email_subject_and_intro")
 
 
-def test_build_email_table_columns_order():
+def test_build_email_dashboard_link_replaces_table():
     run = _run(errors=[_err()])
-    _, html = email_report.build_weekly_email(run)
-    for h in ["Product", "Description", "Brand", "Location", "Error", "Forecast",
-              "Reason", "Action", "First Time", "Duration", "Priority", "Owner", "Action Plan"]:
-        assert ">" + h + "<" in html, "missing column " + h
-    # Owner must come before Action Plan; Action Plan is the last data column.
-    assert html.index(">Owner<") < html.index(">Action Plan<"), "Owner must precede Action Plan"
-    assert "83929605" in html, "product value missing"
-    print("PASS test_build_email_table_columns_order")
+    _, html = email_report.build_weekly_email(run, dashboard_url="http://143.35.13.175:8000/")
+    assert "Details please refer to" in html, "details link line missing"
+    assert 'href="http://143.35.13.175:8000/"' in html, "dashboard url missing"
+    assert ">DFV Dashboard<" in html, "DFV Dashboard link text missing"
+    # The old inline details table must be gone.
+    assert "Details as below" not in html, "old table heading should be removed"
+    assert "<table" not in html, "details table should be removed"
+    print("PASS test_build_email_dashboard_link_replaces_table")
+
+
+def test_build_email_dashboard_url_escaped():
+    _, html = email_report.build_weekly_email(
+        _run(errors=[_err()]), dashboard_url='http://x/"><script>alert(1)</script>')
+    assert "<script>alert(1)</script>" not in html, "url not escaped into href"
+    print("PASS test_build_email_dashboard_url_escaped")
 
 
 def test_build_email_escapes_html():
@@ -106,7 +113,7 @@ def test_build_email_inserts_screenshot_when_cid():
     _, html = email_report.build_weekly_email(_run(errors=[_err()]), image_cid="dashboard")
     assert 'src="cid:dashboard"' in html, "screenshot img missing"
     assert html.index("Executive Summary") < html.index("cid:dashboard"), "img must be after summary"
-    assert html.index("cid:dashboard") < html.index("Details as below"), "img must be before details"
+    assert html.index("cid:dashboard") < html.index("Details please refer to"), "img must be before details link"
     print("PASS test_build_email_inserts_screenshot_when_cid")
 
 
@@ -134,6 +141,42 @@ def test_load_recipients_missing_returns_blank():
     r = email_report.load_recipients(os.path.join(tempfile.gettempdir(), "no_such_email_cfg.json"))
     assert r == {"to": [], "cc": []}, r
     print("PASS test_load_recipients_missing_returns_blank")
+
+
+def test_load_dashboard_url_from_config():
+    fd, path = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"dashboard_url": "http://143.35.13.175:8000/"}, f)
+    try:
+        assert email_report.load_dashboard_url("http://fallback/", path) == "http://143.35.13.175:8000/"
+    finally:
+        os.remove(path)
+    print("PASS test_load_dashboard_url_from_config")
+
+
+def test_load_dashboard_url_fallback_when_missing():
+    u = email_report.load_dashboard_url("http://fallback/",
+                                        os.path.join(tempfile.gettempdir(), "no_such_cfg.json"))
+    assert u == "http://fallback/", u
+    print("PASS test_load_dashboard_url_fallback_when_missing")
+
+
+def test_manual_route_serves():
+    client = app_module.create_app().test_client()
+    r = client.get("/manual")
+    assert r.status_code == 200, r.status_code
+    assert b"DFV" in r.data, "manual body missing"
+    print("PASS test_manual_route_serves")
+
+
+def test_dashboard_manual_button_wired():
+    t = dashboard._get_template()
+    assert "操作手册" in t, "manual button label missing"
+    assert 'href="/manual"' in t, "manual link missing"
+    # Manual button must sit to the LEFT of the email button.
+    assert t.index("操作手册") < t.index("生成周报邮件"), "manual must be left of email button"
+    print("PASS test_dashboard_manual_button_wired")
 
 
 def test_open_draft_never_sends():
@@ -213,6 +256,7 @@ def test_endpoint_with_screenshot_200():
     import base64 as _b64
     assert captured["inline"][0][1] == _b64.b64decode(_PNG_1x1), "png bytes mismatch"
     assert "cid:dashboard" in captured["html"], "html missing cid ref"
+    assert "Details please refer to" in captured["html"], "dashboard link missing"
     print("PASS test_endpoint_with_screenshot_200")
 
 
@@ -277,7 +321,8 @@ def test_dashboard_inline_js_syntax_ok_email():
 
 if __name__ == "__main__":
     test_build_email_subject_and_intro()
-    test_build_email_table_columns_order()
+    test_build_email_dashboard_link_replaces_table()
+    test_build_email_dashboard_url_escaped()
     test_build_email_escapes_html()
     test_build_email_prev_week_comparison()
     test_build_email_prev_week_omitted_when_none()
@@ -286,6 +331,10 @@ if __name__ == "__main__":
     test_build_email_no_screenshot_by_default()
     test_load_recipients_reads_file()
     test_load_recipients_missing_returns_blank()
+    test_load_dashboard_url_from_config()
+    test_load_dashboard_url_fallback_when_missing()
+    test_manual_route_serves()
+    test_dashboard_manual_button_wired()
     test_open_draft_never_sends()
     test_open_draft_supports_inline_images()
     test_endpoint_generates_draft_200()

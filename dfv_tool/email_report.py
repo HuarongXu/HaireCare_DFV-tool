@@ -47,12 +47,15 @@ def _owner_counts(errors):
     return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
 
 
-def build_weekly_email(run, prev_run=None, image_cid=None):
+def build_weekly_email(run, prev_run=None, image_cid=None, dashboard_url=None):
     """Return (subject, html_body) for one weekly run. Pure; no I/O, no COM.
 
     If image_cid is given, an inline <img src="cid:..."> for the dashboard
-    snapshot is inserted between the Executive Summary and the details table.
+    snapshot is inserted between the Executive Summary and the details link.
     The caller supplies the matching inline attachment to open_outlook_draft.
+
+    Instead of an inline details table, the body links readers to the live
+    dashboard (dashboard_url) so they always see the latest data.
     """
     errors = run.get("errors") or []
     n = len(errors)
@@ -96,32 +99,14 @@ def build_weekly_email(run, prev_run=None, image_cid=None):
             % _esc(image_cid)
         )
 
-    thead = "".join(
-        '<th style="background:#1a1a2e;color:#fff;padding:6px 10px;text-align:left;'
-        'border:1px solid #ccc;">%s</th>' % _esc(h) for _, h in _COLS)
-    trows = []
-    for e in errors:
-        tds = []
-        for key, _h in _COLS:
-            val = e.get(key)
-            align = "left"
-            if key == "idp_forecast":
-                try:
-                    val = "{:,}".format(int(round(float(val))))
-                except (TypeError, ValueError):
-                    val = ""
-                align = "right"
-            tds.append('<td style="padding:5px 10px;border:1px solid #e0e0e0;text-align:%s;">%s</td>'
-                       % (align, _esc(val)))
-        trows.append("<tr>%s</tr>" % "".join(tds))
-    table = (
-        "<p>Details as below:</p>"
-        '<table style="border-collapse:collapse;font-family:Segoe UI,sans-serif;font-size:12px;">'
-        "<thead><tr>%s</tr></thead><tbody>%s</tbody></table>" % (thead, "".join(trows))
-    )
+    if dashboard_url:
+        details = ('<p>Details please refer to : '
+                   '<a href="%s">DFV Dashboard</a></p>' % _esc(dashboard_url))
+    else:
+        details = "<p>Details please refer to : DFV Dashboard</p>"
 
     body = ('<div style="font-family:Segoe UI,sans-serif;font-size:13px;color:#222;">'
-            + intro + "".join(summ) + snapshot + table
+            + intro + "".join(summ) + snapshot + details
             + "<p>Any questions please let me know, thanks.</p></div>")
     return subject, body
 
@@ -146,6 +131,27 @@ def load_recipients(path=_CONFIG_PATH):
     except (ValueError, OSError) as e:
         log.warning("email_config.json unreadable (%s); recipients left blank", e)
         return {"to": [], "cc": []}
+
+
+def load_dashboard_url(fallback, path=_CONFIG_PATH):
+    """Return the dashboard URL to link in the email.
+
+    Prefer an explicit "dashboard_url" in the local (gitignored) email_config.json;
+    otherwise use `fallback` (typically the request host URL, so a reader clicking
+    the link reaches the same server the sender used). Missing/unreadable config
+    is not fatal — just use the fallback.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        url = cfg.get("dashboard_url")
+        if url:
+            return str(url)
+    except FileNotFoundError:
+        pass
+    except (ValueError, OSError) as e:
+        log.warning("email_config.json unreadable (%s); using fallback dashboard url", e)
+    return fallback
 
 
 def open_outlook_draft(subject, to, cc, html, inline_images=None):

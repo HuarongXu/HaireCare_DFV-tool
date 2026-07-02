@@ -189,6 +189,7 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
     <h1>Demand Flow Validation<small>Forecast Flow Health Check</small></h1>
   </div>
   <div class="week-sel">
+    <a class="copy-btn" href="/manual" target="_blank" rel="noopener" style="text-decoration:none;">📖 操作手册</a>
     <button class="copy-btn" onclick="generateEmail(this)">📧 生成周报邮件</button>
     <button class="sync-btn" onclick="syncOwners()" title="Copy sync command to clipboard">Sync Owners</button>
     <span class="sel-label">Week</span>
@@ -522,7 +523,24 @@ function generateEmail(btn) {
   }
   var area = document.getElementById("snapshotArea");
   if (typeof html2canvas !== "undefined" && area) {
-    html2canvas(area, {scale: 1, backgroundColor: "#eef2f7", useCORS: true, logging: false})
+    var w = Math.ceil(area.scrollWidth);
+    html2canvas(area, {
+      scale: 2,
+      backgroundColor: "#eef2f7",
+      useCORS: true,
+      logging: false,
+      width: w,
+      windowWidth: w,
+      scrollX: 0,
+      scrollY: 0,
+      onclone: function(doc) {
+        // Strip card shadows so the snapshot has no grey band on the right edge.
+        var els = doc.querySelectorAll("#snapshotArea .kpi, #snapshotArea .chart-card, #snapshotArea .card");
+        for (var i = 0; i < els.length; i++) { els[i].style.boxShadow = "none"; }
+        var a = doc.getElementById("snapshotArea");
+        if (a) { a.style.width = w + "px"; a.style.margin = "0"; a.style.overflow = "hidden"; }
+      }
+    })
       .then(function(canvas) { send(canvas.toDataURL("image/png")); })
       .catch(function() { send(null); });  // capture failed -> send without screenshot
   } else {

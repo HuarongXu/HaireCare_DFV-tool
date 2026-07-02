@@ -116,6 +116,7 @@
     <a href="#kpi">KPI Output</a>
     <a href="#error-matrix">Error Matrix</a>
     <a href="#dashboard">Dashboard</a>
+    <a href="#webapp">网页编辑 &amp; 周报邮件</a>
     <a href="#files">File Structure</a>
     <a href="#troubleshooting">Troubleshooting</a>
   </div>
@@ -371,6 +372,7 @@ D767, D901, E295, E496, E467, E474, 5740, E230, D594</code></pre>
     <tr><th>场景</th><th>方法</th><th>位置</th></tr>
     <tr><td>改固定规则（影响未来所有 run）</td><td>修改 config.py</td><td><span class="inline-code">FIXED_OWNERS</span>, <span class="inline-code">LOCATION_OWNERS</span>, <span class="inline-code">HKTW_LOCATIONS</span></td></tr>
     <tr><td>改单次结果（每个 item 不同人）</td><td>编辑 Excel → Sync 回 DB</td><td>编辑 <span class="inline-code">output/DFV_actions_*.xlsx</span> 的 Owner 列，然后运行 <span class="inline-code">python dfv_tool/sync_owners.py</span></td></tr>
+    <tr><td>改单次结果（直接在网页改，推荐）</td><td>网页「允许编辑」→ 直接改 Owner</td><td>运行 <span class="inline-code">python dfv_tool/app.py</span> 打开 <span class="inline-code">http://localhost:8000</span>，开启「允许编辑」开关后修改，自动存 DB（详见「网页编辑 &amp; 周报邮件」章节）</td></tr>
   </table>
 </section>
 
@@ -569,6 +571,18 @@ D767, D901, E295, E496, E467, E474, 5740, E230, D594</code></pre>
       <div class="card-title">&#128260; Sync Owners</div>
       <p>复制同步命令到剪贴板，在终端粘贴执行即可把 Excel 修改的 Owner 同步回 DB 并刷新 Dashboard。</p>
     </div>
+    <div class="card">
+      <div class="card-title">&#9997;&#65039; 允许编辑（网页直改）</div>
+      <p>右上角「允许编辑」开关。开启后可直接在表格里改 Owner 与 Action Plan，自动存 DB，无需改 Excel。默认关闭以防误改。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">&#128231; 生成周报邮件</div>
+      <p>一键生成 Outlook 周报草稿（含 Executive Summary、Dashboard 截图、DFV Dashboard 链接）。只打开草稿，绝不自动发送。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">&#128214; 操作手册</div>
+      <p>顶部「操作手册」按钮，打开本说明文档（<span class="inline-code">/manual</span>）。</p>
+    </div>
   </div>
 
   <h3>数据存储</h3>
@@ -594,9 +608,65 @@ python -c "from dashboard import generate_dashboard; generate_dashboard()"</code
   </div>
 </section>
 
+<!-- ====== WEBAPP & EMAIL ====== -->
+<section id="webapp">
+  <h2>9. 网页编辑 &amp; 周报邮件（Web App）</h2>
+
+  <p>除了双击打开静态 Dashboard，还可以启动一个本地网页服务，直接在浏览器里<strong>在线修改 Owner / Action Plan</strong> 并<strong>一键生成周报邮件</strong>。所有修改实时写入 <span class="inline-code">dfv_history.db</span>，下次同一 code/plant 会自动回填历史 Action Plan。</p>
+
+  <div class="alert alert-info">
+    <div class="alert-title">&#128640; 启动网页服务</div>
+    <pre><code>python dfv_tool/app.py</code></pre>
+    <p>启动后浏览器打开 <span class="inline-code">http://localhost:8000</span>（同一内网他人可用本机 IP 访问，如 <span class="inline-code">http://143.35.x.x:8000</span>）。</p>
+  </div>
+
+  <h3>9.1 在线编辑 Owner / Action Plan</h3>
+  <ul>
+    <li><strong>「允许编辑」开关</strong>：位于 Action Items 工具栏。默认<strong>关闭</strong>，防止误改；开启后 Owner、Action Plan 单元格才可编辑。</li>
+    <li><strong>自动保存</strong>：改完某个单元格失焦后<strong>自动写入数据库</strong>，无需手动保存，也无需再改 Excel / 跑 Sync。</li>
+    <li><strong>Owner 改成新名字</strong>：若填入一个当前筛选里没有的 Owner，该名字会<strong>自动加入 Owner 筛选下拉</strong>，不会漏数据。</li>
+    <li><strong>Action Plan 自动回填</strong>：Action Plan 按 code + plant 记忆。下次出现相同 code/plant 的错误项时，历史 Action Plan 会<strong>自动抓取填充</strong>进来，省去重复输入。</li>
+    <li><strong>审计</strong>：每次修改记录旧值/新值，便于回溯。</li>
+  </ul>
+
+  <h3>9.2 一键生成周报邮件</h3>
+  <p>点击顶部 <strong>&#128231; 生成周报邮件</strong>，工具会打开一封 <strong>Outlook 草稿</strong>供你核对后手动发送。</p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">Executive Summary</div>
+      <p>本周结果 vs 上周环比（结果 pp、待关闭项数）、Aging 分布（&ge;4 周 / &ge;8 周）、按 Owner 的待办分布。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Dashboard 截图</div>
+      <p>自动截取 Dashboard 中 Action Items 以上的所有图表（KPI + 趋势 + 分布），内联到邮件正文。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">DFV Dashboard 链接</div>
+      <p>正文以 <span class="inline-code">Details please refer to : DFV Dashboard</span> 超链接指向在线看板，收件人点击即可看最新明细（不再内嵌大表格）。</p>
+    </div>
+  </div>
+  <div class="alert alert-warning">
+    <div class="alert-title">&#9888;&#65039; 绝不自动发送</div>
+    <p>本功能<strong>只打开草稿</strong>，永远不会自动 Send。请务必人工核对收件人与内容后再点发送。</p>
+  </div>
+
+  <h3>9.3 收件人配置</h3>
+  <p>收件人属于内部信息，<strong>不提交到 git</strong>。复制模板并填入真实地址：</p>
+  <pre><code>copy dfv_tool\email_config.example.json dfv_tool\email_config.json</code></pre>
+  <table>
+    <tr><th>字段</th><th>说明</th></tr>
+    <tr><td><span class="inline-code">to</span> / <span class="inline-code">cc</span></td><td>收件人 / 抄送邮箱列表</td></tr>
+    <tr><td><span class="inline-code">dashboard_url</span></td><td>邮件里「DFV Dashboard」链接指向的地址（可选；不填则用当前访问地址）</td></tr>
+  </table>
+  <p><span class="inline-code">email_config.json</span> 已被 <span class="inline-code">.gitignore</span> 忽略，不会被提交。</p>
+
+  <h3>9.4 数据存储</h3>
+  <p>历史数据存储在 <span class="inline-code">dfv_history.db</span>（SQLite）。<span class="inline-code">errors</span> 表除产品/位置/原因/动作/Owner 外，也保存 <span class="inline-code">action_plan</span>，用于跨周自动回填。</p>
+</section>
+
 <!-- ====== FILE STRUCTURE ====== -->
 <section id="files">
-  <h2>9. File Structure（文件结构）</h2>
+  <h2>10. File Structure（文件结构）</h2>
 
   <div class="file-tree">
     <span class="folder">17.DFV/</span><br>
@@ -623,7 +693,7 @@ python -c "from dashboard import generate_dashboard; generate_dashboard()"</code
 
 <!-- ====== TROUBLESHOOTING ====== -->
 <section id="troubleshooting">
-  <h2>10. Troubleshooting（常见问题）</h2>
+  <h2>11. Troubleshooting（常见问题）</h2>
 
   <div class="card">
     <div class="card-title">&#10060; "Analysis ribbon did not appear within 180s"</div>
