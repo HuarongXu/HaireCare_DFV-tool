@@ -68,8 +68,38 @@ def test_build_email_escapes_html():
     print("PASS test_build_email_escapes_html")
 
 
+def test_build_email_prev_week_comparison():
+    run = _run(diff_pct=0.57, errors=[_err(), _err(), _err()])          # 3 items
+    prev = _run(id=0, run_date="2026-06-23 10:00", diff_pct=0.69,
+                errors=[_err(), _err(), _err(), _err(), _err(), _err(), _err(), _err()])  # 8 items
+    _, html = email_report.build_weekly_email(run, prev)
+    assert "vs last week" in html, "prev-week line missing"
+    assert "0.69% &rarr; 0.57%" in html, "result delta text missing"
+    assert "-5" in html, "item delta missing (8 -> 3)"
+    print("PASS test_build_email_prev_week_comparison")
+
+
+def test_build_email_prev_week_omitted_when_none():
+    _, html = email_report.build_weekly_email(_run(errors=[_err()]))
+    assert "vs last week" not in html, "prev-week line must be omitted"
+    print("PASS test_build_email_prev_week_omitted_when_none")
+
+
+def test_build_email_owner_summary_bold():
+    run = _run(errors=[_err(owner="Becky"), _err(owner="Becky"), _err(owner="Lucy"),
+                       _err(owner="")])
+    _, html = email_report.build_weekly_email(run)
+    assert "<b>Becky</b>: 2" in html, "Becky count/bold wrong"
+    assert "<b>Lucy</b>: 1" in html, "Lucy count/bold wrong"
+    assert "(未分配)</b>: 1" in html, "blank owner not grouped"
+    print("PASS test_build_email_owner_summary_bold")
+
+
 if __name__ == "__main__":
     test_build_email_subject_and_intro()
     test_build_email_table_columns_order()
     test_build_email_escapes_html()
+    test_build_email_prev_week_comparison()
+    test_build_email_prev_week_omitted_when_none()
+    test_build_email_owner_summary_bold()
     print("\nALL WEEKLY EMAIL TESTS PASSED")
