@@ -224,6 +224,7 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
   <div class="section-title">
     Action Items <span class="badge" id="actionCount">0</span>
     <button class="copy-btn" onclick="copyTable()">Copy Table</button>
+    <button class="copy-btn" onclick="generateEmail(this)">📧 生成周报邮件</button>
   </div>
   <div class="toolbar">
     <div class="filter-group"><span class="filter-label">Priority</span><div class="filters" id="priorityFilters"></div></div>
@@ -489,6 +490,27 @@ function renderActions(errors) {
   }
   html += '</tbody></table>';
   document.getElementById("actionTableWrap").innerHTML = html;
+}
+
+function generateEmail(btn) {
+  var idx = document.getElementById("weekPicker").value;
+  var run = DATA[idx];
+  if (!run) { alert("No week selected"); return; }
+  if (btn) { btn.textContent = "生成中…"; btn.disabled = true; }
+  fetch("/api/email/weekly", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({run_id: run.id})
+  }).then(function(r) {
+    return r.json().then(function(j) { return {ok: r.ok, j: j}; });
+  }).then(function(res) {
+    if (btn) { btn.textContent = "📧 生成周报邮件"; btn.disabled = false; }
+    if (res.ok && res.j.ok) { alert("已在 Outlook 打开草稿，请核对后发送。"); }
+    else { alert("生成失败：" + ((res.j && res.j.error) || "unknown")); }
+  }).catch(function() {
+    if (btn) { btn.textContent = "📧 生成周报邮件"; btn.disabled = false; }
+    alert("生成失败（网络或服务器错误）");
+  });
 }
 
 function copyTable() {

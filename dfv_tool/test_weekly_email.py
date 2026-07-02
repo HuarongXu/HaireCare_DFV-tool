@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import email_report
 import history
 import app as app_module
+import dashboard
 
 
 def _run(**kw):
@@ -179,6 +180,35 @@ def test_endpoint_com_failure_500():
     print("PASS test_endpoint_com_failure_500")
 
 
+def test_dashboard_email_button_wired():
+    t = dashboard._get_template()
+    assert "生成周报邮件" in t, "email button label missing"
+    assert "function generateEmail" in t, "generateEmail() missing"
+    assert "/api/email/weekly" in t, "email endpoint not wired"
+    assert "run_id" in t, "run_id not sent"
+    print("PASS test_dashboard_email_button_wired")
+
+
+def test_dashboard_inline_js_syntax_ok_email():
+    import re, shutil, subprocess
+    node = shutil.which("node")
+    if not node:
+        print("SKIP test_dashboard_inline_js_syntax_ok_email (node not found)")
+        return
+    html = dashboard._get_template()
+    blocks = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", html, re.S)
+    js = "\n;\n".join(blocks).replace("__DATA_JSON__", "[]")
+    fd, path = tempfile.mkstemp(suffix=".js")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(js)
+        rc = subprocess.run([node, "--check", path], capture_output=True, text=True)
+        assert rc.returncode == 0, "inline JS syntax error:\n" + rc.stderr
+    finally:
+        os.remove(path)
+    print("PASS test_dashboard_inline_js_syntax_ok_email")
+
+
 if __name__ == "__main__":
     test_build_email_subject_and_intro()
     test_build_email_table_columns_order()
@@ -194,4 +224,6 @@ if __name__ == "__main__":
     test_endpoint_missing_run_id_400()
     test_endpoint_bool_run_id_400()
     test_endpoint_com_failure_500()
+    test_dashboard_email_button_wired()
+    test_dashboard_inline_js_syntax_ok_email()
     print("\nALL WEEKLY EMAIL TESTS PASSED")
