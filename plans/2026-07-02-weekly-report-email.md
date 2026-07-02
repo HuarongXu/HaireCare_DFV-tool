@@ -758,30 +758,18 @@ dfv_tool/email_config.json
 
 - [ ] **Step 2: 落地真实收件人配置（本地，不提交）**
 
-创建 `dfv_tool/email_config.json`（用参考邮件里的真实分发列表；此文件已被 .gitignore 忽略）：
+创建 `dfv_tool/email_config.json`，把参考邮件里的真实分发列表填进去（15 个 To + 2 个 CC）。
+**真实地址属于内部 PII，绝不写入任何被 git 跟踪的文件（含本计划）**；此文件已被 `.gitignore`
+忽略。结构照抄 `dfv_tool/email_config.example.json`，只把占位地址替换成参考邮件里的真实收件人：
 
 ```json
 {
   "to": [
-    "Xie, XueYing <xie.xy@pg.com>",
-    "Xu, Lucy <xu.x.17@pg.com>",
-    "HC SIP team <HCSIPteam@pgone.onmicrosoft.com>",
-    "GC HC CSP Team <GCHCCSPTeam@pgone.onmicrosoft.com>",
-    "GC-HC-IOL <GC-HC-IOL@pgone.onmicrosoft.com>",
-    "Zeng, Rebecca <zeng.re@pg.com>",
-    "Wenhao, Wu <wenhao.wu@pg.com>",
-    "Chen, Guimin <chen.g.9@pg.com>",
-    "Li, Yanrong <li.y.47@pg.com>",
-    "Sun, Yuchen <sun.y.25@pg.com>",
-    "GC DRP <GCDRP@pgone.onmicrosoft.com>",
-    "Huang, Molly <huang.h.9@pg.com>",
-    "Zhong, Doris <zhong.d@pg.com>",
-    "Liu, Becky <liu.b.2@pg.com>",
-    "Wang, Lia <wang.r.19@pg.com>"
+    "Recipient Name <addr@example.com>",
+    "Distribution List <dl@example.com>"
   ],
   "cc": [
-    "Xu, Xia <xu.xi.3@pg.com>",
-    "Chen, Mingjia <chen.m.29@pg.com>"
+    "CC Name <addr@example.com>"
   ]
 }
 ```
