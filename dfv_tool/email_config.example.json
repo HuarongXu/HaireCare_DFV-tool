@@ -1,0 +1,10 @@
+{
+  "to": [
+    "Recipient One <person1@example.com>",
+    "Recipient Two <person2@example.com>",
+    "Some Distribution List <dl-name@example.com>"
+  ],
+  "cc": [
+    "CC Person <cc1@example.com>"
+  ]
+}
