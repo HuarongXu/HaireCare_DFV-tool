@@ -59,6 +59,7 @@ def _get_template():
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DFV Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -96,7 +97,7 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
                  background:rgba(255,255,255,.07); color:#fff; font-size:.84em; cursor:pointer; }
 .topbar select option { color:#0f172a; }
 
-.kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; padding:24px 32px 6px;
+.kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; padding:10px 0 6px;
            max-width:1600px; margin:0 auto; }
 .kpi { background:var(--card); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow-sm);
        border:1px solid var(--border); position:relative; overflow:hidden; }
@@ -118,6 +119,8 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
                  letter-spacing:.6px; font-weight:700; }
 .chart-card h3 span { text-transform:none; letter-spacing:0; color:var(--text3); font-weight:400; }
 .chart-card canvas { max-height:260px; }
+.chart-row-3 .chart-card { display:flex; flex-direction:column; }
+.chart-row-3 .chart-card canvas { height:200px !important; max-height:200px; }
 
 .section-title { font-size:1.05em; font-weight:700; color:var(--text); margin:30px 0 14px;
                  display:flex; align-items:center; gap:12px; }
@@ -186,16 +189,17 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
     <h1>Demand Flow Validation<small>Forecast Flow Health Check</small></h1>
   </div>
   <div class="week-sel">
+    <button class="copy-btn" onclick="generateEmail(this)">📧 生成周报邮件</button>
     <button class="sync-btn" onclick="syncOwners()" title="Copy sync command to clipboard">Sync Owners</button>
     <span class="sel-label">Week</span>
     <select id="weekPicker" onchange="switchWeek(this.value)"></select>
   </div>
 </div>
 
-<div class="kpi-row" id="kpiRow"></div>
-
 <div class="main">
-  <div class="chart-row">
+  <div id="snapshotArea">
+    <div class="kpi-row" id="kpiRow"></div>
+    <div class="chart-row">
     <div class="chart-card">
       <h3>Volume Difference % (18 Months) &mdash; Target &lt; 2%</h3>
       <canvas id="chartDiff"></canvas>
@@ -220,16 +224,16 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
       <canvas id="chartOwner"></canvas>
     </div>
   </div>
+  </div>
 
   <div class="section-title">
     Action Items <span class="badge" id="actionCount">0</span>
-    <button class="copy-btn" onclick="copyTable()">Copy Table</button>
-    <button class="copy-btn" onclick="generateEmail(this)">📧 生成周报邮件</button>
   </div>
   <div class="toolbar">
     <div class="filter-group"><span class="filter-label">Priority</span><div class="filters" id="priorityFilters"></div></div>
     <div class="filter-group"><span class="filter-label">Owner</span><div class="filters" id="ownerFilters"></div></div>
-    <div class="filter-group"><button id="ownerEditToggle" class="edit-toggle" onclick="toggleOwnerEdit()">&#128274; 允许编辑</button></div>
+    <div class="filter-group"><button id="ownerEditToggle" class="edit-toggle" onclick="toggleOwnerEdit()">&#128274; 允许编辑</button>
+      <button class="copy-btn" onclick="copyTable()">Copy Table</button></div>
   </div>
   <div class="table-wrap" id="actionTableWrap"></div>
 </div>
@@ -497,20 +501,33 @@ function generateEmail(btn) {
   var run = DATA[idx];
   if (!run) { alert("No week selected"); return; }
   if (btn) { btn.textContent = "生成中…"; btn.disabled = true; }
-  fetch("/api/email/weekly", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({run_id: run.id})
-  }).then(function(r) {
-    return r.json().then(function(j) { return {ok: r.ok, j: j}; });
-  }).then(function(res) {
-    if (btn) { btn.textContent = "📧 生成周报邮件"; btn.disabled = false; }
-    if (res.ok && res.j.ok) { alert("已在 Outlook 打开草稿，请核对后发送。"); }
-    else { alert("生成失败：" + ((res.j && res.j.error) || "unknown")); }
-  }).catch(function() {
-    if (btn) { btn.textContent = "📧 生成周报邮件"; btn.disabled = false; }
-    alert("生成失败（网络或服务器错误）");
-  });
+  function reset() { if (btn) { btn.textContent = "📧 生成周报邮件"; btn.disabled = false; } }
+  function send(shot) {
+    var payload = { run_id: run.id };
+    if (shot) { payload.screenshot = shot; }
+    fetch("/api/email/weekly", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    }).then(function(r) {
+      return r.json().then(function(j) { return {ok: r.ok, j: j}; });
+    }).then(function(res) {
+      reset();
+      if (res.ok && res.j.ok) { alert("已在 Outlook 打开草稿，请核对后发送。"); }
+      else { alert("生成失败：" + ((res.j && res.j.error) || "unknown")); }
+    }).catch(function() {
+      reset();
+      alert("生成失败（网络或服务器错误）");
+    });
+  }
+  var area = document.getElementById("snapshotArea");
+  if (typeof html2canvas !== "undefined" && area) {
+    html2canvas(area, {scale: 1, backgroundColor: "#eef2f7", useCORS: true, logging: false})
+      .then(function(canvas) { send(canvas.toDataURL("image/png")); })
+      .catch(function() { send(null); });  // capture failed -> send without screenshot
+  } else {
+    send(null);
+  }
 }
 
 function copyTable() {
@@ -609,7 +626,7 @@ function renderPriorityChart(items) {
       datasets: [{ data: [c.High, c.Mid, c.Low],
         backgroundColor: ["#dc2626", "#d97706", "#16a34a"], borderWidth: 2, borderColor: "#fff" }]
     },
-    options: { responsive: true, cutout: "60%",
+    options: { responsive: true, maintainAspectRatio: false, cutout: "60%",
       plugins: { legend: { position: "bottom",
         labels: { usePointStyle: true, pointStyle: "circle", padding: 14, font: { size: 11 } } } } },
     plugins: [doughnutLabels]
@@ -635,7 +652,7 @@ function renderAgingChart(items) {
       datasets: [{ label: "Items", data: b,
         backgroundColor: ["#16a34a", "#d97706", "#dc2626"], borderRadius: 5, borderSkipped: false }]
     },
-    options: { responsive: true, layout: { padding: { top: 16 } },
+    options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 16 } },
       plugins: { legend: { display: false } },
       scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: "#eef2f6" },
         title: { display: true, text: "Items" } },
@@ -662,7 +679,7 @@ function renderOwnerChart(items) {
     type: "bar",
     data: { labels: labels, datasets: [{ label: "Items", data: data,
       backgroundColor: "#2563eb", hoverBackgroundColor: "#1d4ed8", borderRadius: 5, barThickness: 16 }] },
-    options: { indexAxis: "y", responsive: true,
+    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false,
       layout: { padding: { right: 24 } },
       plugins: { legend: { display: false } },
       scales: { x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: "#eef2f6" } },

@@ -16,6 +16,10 @@ import history
 import app as app_module
 import dashboard
 
+# Valid 1x1 PNG (base64, no data-URL prefix) for screenshot tests.
+_PNG_1x1 = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+            "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+
 
 def _run(**kw):
     base = {
@@ -96,6 +100,20 @@ def test_build_email_owner_summary_bold():
     assert "<b>Lucy</b>: 1" in html, "Lucy count/bold wrong"
     assert "(未分配)</b>: 1" in html, "blank owner not grouped"
     print("PASS test_build_email_owner_summary_bold")
+
+
+def test_build_email_inserts_screenshot_when_cid():
+    _, html = email_report.build_weekly_email(_run(errors=[_err()]), image_cid="dashboard")
+    assert 'src="cid:dashboard"' in html, "screenshot img missing"
+    assert html.index("Executive Summary") < html.index("cid:dashboard"), "img must be after summary"
+    assert html.index("cid:dashboard") < html.index("Details as below"), "img must be before details"
+    print("PASS test_build_email_inserts_screenshot_when_cid")
+
+
+def test_build_email_no_screenshot_by_default():
+    _, html = email_report.build_weekly_email(_run(errors=[_err()]))
+    assert "cid:" not in html, "no cid image expected by default"
+    print("PASS test_build_email_no_screenshot_by_default")
 
 
 def test_load_recipients_reads_file():
@@ -180,6 +198,54 @@ def test_endpoint_com_failure_500():
     print("PASS test_endpoint_com_failure_500")
 
 
+def test_endpoint_with_screenshot_200():
+    captured = {}
+    def stub(subject, to, cc, html, inline_images=None):
+        captured["inline"] = inline_images
+        captured["html"] = html
+    history.get_all_data = lambda: [_run(id=2, errors=[_err()])]
+    email_report.open_outlook_draft = stub
+    client = app_module.create_app().test_client()
+    r = client.post("/api/email/weekly",
+                    json={"run_id": 2, "screenshot": "data:image/png;base64," + _PNG_1x1})
+    assert r.status_code == 200, r.status_code
+    assert captured["inline"] and captured["inline"][0][0] == "dashboard", captured.get("inline")
+    import base64 as _b64
+    assert captured["inline"][0][1] == _b64.b64decode(_PNG_1x1), "png bytes mismatch"
+    assert "cid:dashboard" in captured["html"], "html missing cid ref"
+    print("PASS test_endpoint_with_screenshot_200")
+
+
+def test_endpoint_bad_screenshot_type_400():
+    client = _client([_run(id=2, errors=[_err()])], lambda *a, **k: None)
+    r = client.post("/api/email/weekly",
+                    json={"run_id": 2, "screenshot": "data:text/html;base64,AAAA"})
+    assert r.status_code == 400, r.status_code
+    print("PASS test_endpoint_bad_screenshot_type_400")
+
+
+def test_endpoint_oversize_screenshot_400():
+    old = app_module.SCREENSHOT_MAX_B64
+    app_module.SCREENSHOT_MAX_B64 = 4
+    try:
+        client = _client([_run(id=2, errors=[_err()])], lambda *a, **k: None)
+        r = client.post("/api/email/weekly",
+                        json={"run_id": 2, "screenshot": "data:image/png;base64," + _PNG_1x1})
+        assert r.status_code == 400, r.status_code
+    finally:
+        app_module.SCREENSHOT_MAX_B64 = old
+    print("PASS test_endpoint_oversize_screenshot_400")
+
+
+def test_open_draft_supports_inline_images():
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "email_report.py"),
+               encoding="utf-8").read()
+    assert "inline_images" in src, "open_outlook_draft must accept inline_images"
+    assert "3712001F" in src, "must set PR_ATTACH_CONTENT_ID for inline image"
+    assert "Attachments" in src, "must attach the image"
+    print("PASS test_open_draft_supports_inline_images")
+
+
 def test_dashboard_email_button_wired():
     t = dashboard._get_template()
     assert "生成周报邮件" in t, "email button label missing"
@@ -216,14 +282,20 @@ if __name__ == "__main__":
     test_build_email_prev_week_comparison()
     test_build_email_prev_week_omitted_when_none()
     test_build_email_owner_summary_bold()
+    test_build_email_inserts_screenshot_when_cid()
+    test_build_email_no_screenshot_by_default()
     test_load_recipients_reads_file()
     test_load_recipients_missing_returns_blank()
     test_open_draft_never_sends()
+    test_open_draft_supports_inline_images()
     test_endpoint_generates_draft_200()
     test_endpoint_bad_run_id_404()
     test_endpoint_missing_run_id_400()
     test_endpoint_bool_run_id_400()
     test_endpoint_com_failure_500()
+    test_endpoint_with_screenshot_200()
+    test_endpoint_bad_screenshot_type_400()
+    test_endpoint_oversize_screenshot_400()
     test_dashboard_email_button_wired()
     test_dashboard_inline_js_syntax_ok_email()
     print("\nALL WEEKLY EMAIL TESTS PASSED")

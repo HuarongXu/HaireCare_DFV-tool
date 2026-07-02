@@ -47,8 +47,13 @@ def _owner_counts(errors):
     return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
 
 
-def build_weekly_email(run, prev_run=None):
-    """Return (subject, html_body) for one weekly run. Pure; no I/O, no COM."""
+def build_weekly_email(run, prev_run=None, image_cid=None):
+    """Return (subject, html_body) for one weekly run. Pure; no I/O, no COM.
+
+    If image_cid is given, an inline <img src="cid:..."> for the dashboard
+    snapshot is inserted between the Executive Summary and the details table.
+    The caller supplies the matching inline attachment to open_outlook_draft.
+    """
     errors = run.get("errors") or []
     n = len(errors)
     diff = run.get("diff_pct")
@@ -81,6 +86,16 @@ def build_weekly_email(run, prev_run=None):
     summ.append("<li>By owner: %s</li>" % (owner_bits or "&mdash;"))
     summ.append("</ul>")
 
+    snapshot = ""
+    if image_cid:
+        snapshot = (
+            '<p><b>Dashboard snapshot</b></p>'
+            '<div style="margin:8px 0 14px;">'
+            '<img src="cid:%s" alt="Dashboard snapshot" '
+            'style="max-width:100%%;border:1px solid #ccc;border-radius:4px;"></div>'
+            % _esc(image_cid)
+        )
+
     thead = "".join(
         '<th style="background:#1a1a2e;color:#fff;padding:6px 10px;text-align:left;'
         'border:1px solid #ccc;">%s</th>' % _esc(h) for _, h in _COLS)
@@ -106,7 +121,7 @@ def build_weekly_email(run, prev_run=None):
     )
 
     body = ('<div style="font-family:Segoe UI,sans-serif;font-size:13px;color:#222;">'
-            + intro + "".join(summ) + table
+            + intro + "".join(summ) + snapshot + table
             + "<p>Any questions please let me know, thanks.</p></div>")
     return subject, body
 
@@ -133,15 +148,40 @@ def load_recipients(path=_CONFIG_PATH):
         return {"to": [], "cc": []}
 
 
-def open_outlook_draft(subject, to, cc, html):
+def open_outlook_draft(subject, to, cc, html, inline_images=None):
     """Open an Outlook draft (never send). win32com is imported lazily so unit
     tests and non-Windows tooling don't require Outlook to import this module.
-    Raises on COM failure; the caller maps that to an HTTP 500 (R13)."""
+    Raises on COM failure; the caller maps that to an HTTP 500 (R13).
+
+    inline_images: optional list of (content_id, png_bytes). Each is written to a
+    private temp file, attached, and tagged with PR_ATTACH_CONTENT_ID so the
+    matching <img src="cid:..."> in the body resolves. Temp files are removed
+    once the draft is created (Outlook copies the bytes into the item)."""
+    import tempfile
     import win32com.client  # lazy import (R11/R13)
     outlook = win32com.client.Dispatch("Outlook.Application")
     mail = outlook.CreateItem(0)  # 0 = olMailItem
     mail.Subject = subject
     mail.To = "; ".join(to or [])
     mail.CC = "; ".join(cc or [])
-    mail.HTMLBody = html
-    mail.Display(False)  # open as editable draft only — this module never sends
+
+    tmp_paths = []
+    try:
+        for content_id, data in (inline_images or []):
+            fd, path = tempfile.mkstemp(suffix=".png")
+            os.close(fd)
+            with open(path, "wb") as f:
+                f.write(data)
+            tmp_paths.append(path)
+            att = mail.Attachments.Add(path)
+            # Mark as inline via a Content-ID so <img src="cid:..."> resolves.
+            att.PropertyAccessor.SetProperty(
+                "http://schemas.microsoft.com/mapi/proptag/0x3712001F", content_id)
+        mail.HTMLBody = html
+        mail.Display(False)  # open as editable draft only — this module never sends
+    finally:
+        for p in tmp_paths:
+            try:
+                os.remove(p)
+            except OSError:
+                pass

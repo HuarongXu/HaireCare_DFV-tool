@@ -6,6 +6,8 @@ specs/editable-owner-actionplan/spec.md). All request input is still validated
 at this boundary and all DB writes are parameterized. Security response headers
 are set to reduce clickjacking / MIME sniffing.
 """
+import base64
+import binascii
 import json
 import os
 import sys
@@ -19,6 +21,10 @@ import email_report
 
 OWNER_MAX = 200
 ACTION_PLAN_MAX = 2000
+# Cap the base64 screenshot payload (~6 MB decoded) to bound memory/DoS.
+SCREENSHOT_MAX_B64 = 8_000_000
+_PNG_PREFIX = "data:image/png;base64,"
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 # Drop control chars except tab/newline/carriage-return (prevents log/HTML
 # injection via stored values).
 _CTRL = {c: None for c in range(32) if c not in (9, 10, 13)}
@@ -97,15 +103,39 @@ def create_app():
         run = next((r for r in runs if r["id"] == run_id), None)
         if run is None:
             return jsonify({"ok": False, "error": "run not found"}), 404
-        subject, html = email_report.build_weekly_email(run, _prev_run(runs, run))
+
+        # Optional dashboard screenshot: a PNG data URL captured client-side.
+        # Validate strictly (type, size, magic bytes) before it reaches Outlook.
+        image_cid = None
+        inline_images = None
+        shot = data.get("screenshot")
+        if shot is not None:
+            if not isinstance(shot, str) or not shot.startswith(_PNG_PREFIX):
+                return jsonify({"ok": False, "error": "invalid screenshot"}), 400
+            b64 = shot[len(_PNG_PREFIX):]
+            if len(b64) > SCREENSHOT_MAX_B64:
+                return jsonify({"ok": False, "error": "screenshot too large"}), 400
+            try:
+                png_bytes = base64.b64decode(b64, validate=True)
+            except (binascii.Error, ValueError):
+                return jsonify({"ok": False, "error": "invalid screenshot"}), 400
+            if not png_bytes.startswith(_PNG_MAGIC):
+                return jsonify({"ok": False, "error": "invalid screenshot"}), 400
+            image_cid = "dashboard"
+            inline_images = [(image_cid, png_bytes)]
+
+        subject, html = email_report.build_weekly_email(
+            run, _prev_run(runs, run), image_cid=image_cid)
         recips = email_report.load_recipients()
         try:
-            email_report.open_outlook_draft(subject, recips["to"], recips["cc"], html)
+            email_report.open_outlook_draft(
+                subject, recips["to"], recips["cc"], html, inline_images=inline_images)
         except Exception as e:  # COM/system failure -> 500 (R13)
             app.logger.exception("weekly email draft failed run_id=%s", run_id)
             return jsonify({"ok": False, "error": str(e)}), 500
         # Audit: no recipient PII in the log line (R14).
-        app.logger.info("weekly email draft opened run_id=%s ip=%s", run_id, request.remote_addr)
+        app.logger.info("weekly email draft opened run_id=%s ip=%s has_shot=%s",
+                        run_id, request.remote_addr, image_cid is not None)
         return jsonify({"ok": True, "subject": subject})
 
     return app
