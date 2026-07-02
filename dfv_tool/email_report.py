@@ -109,3 +109,25 @@ def build_weekly_email(run, prev_run=None):
             + intro + "".join(summ) + table
             + "<p>Any questions please let me know, thanks.</p></div>")
     return subject, body
+
+
+def load_recipients(path=_CONFIG_PATH):
+    """Read {"to": [...], "cc": [...]} from a local JSON config.
+
+    Recipients are internal PII and must NOT be committed to git — the real file
+    (email_config.json) is gitignored (R4). Missing/unreadable config is not fatal:
+    return empty lists so the draft still opens (user can fill recipients in Outlook).
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        return {
+            "to": [str(x) for x in (cfg.get("to") or [])],
+            "cc": [str(x) for x in (cfg.get("cc") or [])],
+        }
+    except FileNotFoundError:
+        log.warning("email_config.json not found at %s; recipients left blank", path)
+        return {"to": [], "cc": []}
+    except (ValueError, OSError) as e:
+        log.warning("email_config.json unreadable (%s); recipients left blank", e)
+        return {"to": [], "cc": []}

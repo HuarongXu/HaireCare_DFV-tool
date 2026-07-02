@@ -95,6 +95,26 @@ def test_build_email_owner_summary_bold():
     print("PASS test_build_email_owner_summary_bold")
 
 
+def test_load_recipients_reads_file():
+    fd, path = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"to": ["A <a@pg.com>", "B <b@pg.com>"], "cc": ["C <c@pg.com>"]}, f)
+    try:
+        r = email_report.load_recipients(path)
+        assert r["to"] == ["A <a@pg.com>", "B <b@pg.com>"], r
+        assert r["cc"] == ["C <c@pg.com>"], r
+    finally:
+        os.remove(path)
+    print("PASS test_load_recipients_reads_file")
+
+
+def test_load_recipients_missing_returns_blank():
+    r = email_report.load_recipients(os.path.join(tempfile.gettempdir(), "no_such_email_cfg.json"))
+    assert r == {"to": [], "cc": []}, r
+    print("PASS test_load_recipients_missing_returns_blank")
+
+
 if __name__ == "__main__":
     test_build_email_subject_and_intro()
     test_build_email_table_columns_order()
@@ -102,4 +122,6 @@ if __name__ == "__main__":
     test_build_email_prev_week_comparison()
     test_build_email_prev_week_omitted_when_none()
     test_build_email_owner_summary_bold()
+    test_load_recipients_reads_file()
+    test_load_recipients_missing_returns_blank()
     print("\nALL WEEKLY EMAIL TESTS PASSED")
