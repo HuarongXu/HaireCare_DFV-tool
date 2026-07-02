@@ -21,6 +21,17 @@
   .nav a { padding: 10px 20px; text-decoration: none; color: #555; font-size: 0.85em; white-space: nowrap; border-left: 3px solid transparent; transition: all 0.2s; }
   .nav a:hover { color: var(--blue); background: #f0f6ff; border-left-color: var(--blue); }
 
+  /* Manual search */
+  .navsearch { padding: 12px 12px 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff; z-index: 2; }
+  .navsearch .row { display: flex; gap: 4px; }
+  #manualSearch { flex: 1; min-width: 0; padding: 7px 9px; font-size: 0.85em; border: 1px solid var(--border); border-radius: 5px; outline: none; }
+  #manualSearch:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(0,120,212,0.15); }
+  .navsearch button { border: 1px solid var(--border); background: #f5f7fa; border-radius: 5px; cursor: pointer; font-size: 0.8em; padding: 0 8px; color: #444; }
+  .navsearch button:hover { background: #e8f0fe; border-color: var(--blue); color: var(--blue); }
+  .navsearch .count { margin-top: 6px; font-size: 0.75em; color: #888; min-height: 1em; }
+  mark.search-hit { background: #fff3a0; color: inherit; border-radius: 2px; }
+  mark.search-hit.active { background: var(--orange); color: #fff; }
+
   /* Content */
   .container { max-width: 1060px; padding: 30px 24px 80px; margin-left: 200px; }
   .footer { margin-left: 200px; }
@@ -107,6 +118,14 @@
 
 <!-- ====== NAV ====== -->
 <div class="nav">
+  <div class="navsearch">
+    <div class="row">
+      <input id="manualSearch" type="search" placeholder="搜索全文… (Enter 下一个)" autocomplete="off">
+      <button type="button" id="searchPrev" title="上一个 (Shift+Enter)">&#9650;</button>
+      <button type="button" id="searchNext" title="下一个 (Enter)">&#9660;</button>
+    </div>
+    <div class="count" id="searchCount"></div>
+  </div>
   <div class="nav-inner">
     <a href="#overview">Overview</a>
     <a href="#prerequisites">Prerequisites</a>
@@ -775,6 +794,115 @@ window.addEventListener('scroll', function() {
     }
   });
 });
+
+// ===== Full-text search over the manual content =====
+(function () {
+  var input = document.getElementById('manualSearch');
+  var countEl = document.getElementById('searchCount');
+  var container = document.querySelector('.container');
+  if (!input || !container) return;
+
+  var hits = [];       // <mark> elements currently highlighting matches
+  var current = -1;    // index of the active hit
+  var debounce = null;
+
+  function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // Remove all previous highlights and restore original text.
+  function clearHighlights() {
+    for (var i = 0; i < hits.length; i++) {
+      var m = hits[i];
+      var parent = m.parentNode;
+      if (!parent) continue;
+      parent.replaceChild(document.createTextNode(m.textContent), m);
+      parent.normalize();
+    }
+    hits = [];
+    current = -1;
+  }
+
+  function highlight(term) {
+    var re = new RegExp(escapeRegExp(term), 'gi');
+    var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        var p = node.parentNode;
+        while (p && p !== container) {
+          var tag = p.nodeName;
+          if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') return NodeFilter.FILTER_REJECT;
+          p = p.parentNode;
+        }
+        return re.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
+    });
+    var targets = [];
+    var n;
+    while ((n = walker.nextNode())) targets.push(n);
+
+    for (var i = 0; i < targets.length; i++) {
+      var node = targets[i];
+      var text = node.nodeValue;
+      re.lastIndex = 0;
+      var frag = document.createDocumentFragment();
+      var last = 0, match;
+      while ((match = re.exec(text))) {
+        if (match.index > last) frag.appendChild(document.createTextNode(text.slice(last, match.index)));
+        var mk = document.createElement('mark');
+        mk.className = 'search-hit';
+        mk.textContent = match[0];
+        frag.appendChild(mk);
+        hits.push(mk);
+        last = match.index + match[0].length;
+        if (match[0].length === 0) re.lastIndex++;  // guard against zero-width
+      }
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag, node);
+    }
+  }
+
+  function setActive(idx) {
+    if (!hits.length) return;
+    if (current >= 0 && hits[current]) hits[current].classList.remove('active');
+    current = (idx + hits.length) % hits.length;
+    var el = hits[current];
+    el.classList.add('active');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    countEl.textContent = (current + 1) + ' / ' + hits.length + ' 处匹配';
+  }
+
+  function runSearch() {
+    clearHighlights();
+    var term = input.value.trim();
+    if (!term) { countEl.textContent = ''; return; }
+    highlight(term);
+    if (hits.length) {
+      countEl.textContent = hits.length + ' 处匹配';
+      setActive(0);
+    } else {
+      countEl.textContent = '无匹配';
+    }
+  }
+
+  input.addEventListener('input', function () {
+    clearTimeout(debounce);
+    debounce = setTimeout(runSearch, 200);
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!hits.length) { runSearch(); return; }
+      setActive(current + (e.shiftKey ? -1 : 1));
+    } else if (e.key === 'Escape') {
+      input.value = '';
+      clearHighlights();
+      countEl.textContent = '';
+    }
+  });
+  document.getElementById('searchNext').addEventListener('click', function () { setActive(current + 1); });
+  document.getElementById('searchPrev').addEventListener('click', function () { setActive(current - 1); });
+})();
 </script>
 
 </body>
