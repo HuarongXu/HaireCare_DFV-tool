@@ -523,22 +523,15 @@ function generateEmail(btn) {
   }
   var area = document.getElementById("snapshotArea");
   if (typeof html2canvas !== "undefined" && area) {
-    var w = Math.ceil(area.scrollWidth);
     html2canvas(area, {
-      scale: 2,
+      scale: 1,
       backgroundColor: "#eef2f7",
       useCORS: true,
       logging: false,
-      width: w,
-      windowWidth: w,
-      scrollX: 0,
-      scrollY: 0,
       onclone: function(doc) {
         // Strip card shadows so the snapshot has no grey band on the right edge.
         var els = doc.querySelectorAll("#snapshotArea .kpi, #snapshotArea .chart-card, #snapshotArea .card");
         for (var i = 0; i < els.length; i++) { els[i].style.boxShadow = "none"; }
-        var a = doc.getElementById("snapshotArea");
-        if (a) { a.style.width = w + "px"; a.style.margin = "0"; a.style.overflow = "hidden"; }
       }
     })
       .then(function(canvas) { send(canvas.toDataURL("image/png")); })
