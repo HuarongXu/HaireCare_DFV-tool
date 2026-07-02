@@ -91,7 +91,7 @@ def create_app():
     def email_weekly():
         data = request.get_json(silent=True) or {}
         run_id = data.get("run_id")
-        if not isinstance(run_id, int):
+        if not isinstance(run_id, int) or isinstance(run_id, bool):
             return jsonify({"ok": False, "error": "run_id (int) required"}), 400
         runs = history.get_all_data()
         run = next((r for r in runs if r["id"] == run_id), None)

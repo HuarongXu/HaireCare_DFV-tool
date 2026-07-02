@@ -161,6 +161,14 @@ def test_endpoint_missing_run_id_400():
     print("PASS test_endpoint_missing_run_id_400")
 
 
+def test_endpoint_bool_run_id_400():
+    # bool is an int subclass; it must not be accepted as a run_id.
+    client = _client([_run(id=1, errors=[_err()])], lambda *a, **k: None)
+    r = client.post("/api/email/weekly", json={"run_id": True})
+    assert r.status_code == 400, r.status_code
+    print("PASS test_endpoint_bool_run_id_400")
+
+
 def test_endpoint_com_failure_500():
     def boom(*a, **k):
         raise RuntimeError("Outlook not installed")
@@ -184,5 +192,6 @@ if __name__ == "__main__":
     test_endpoint_generates_draft_200()
     test_endpoint_bad_run_id_404()
     test_endpoint_missing_run_id_400()
+    test_endpoint_bool_run_id_400()
     test_endpoint_com_failure_500()
     print("\nALL WEEKLY EMAIL TESTS PASSED")
