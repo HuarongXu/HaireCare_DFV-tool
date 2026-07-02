@@ -9,6 +9,11 @@ venv/
 # Secrets
 .env
 
+# Email recipients (internal PII) + reference .msg + temp tooling
+dfv_tool/email_config.json
+*.msg
+.tmp_msgtools/
+
 # Output (generated at runtime)
 output/
 dfv_history.db

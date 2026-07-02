@@ -41,7 +41,8 @@ dfv_tool/
   history.py           SQLite 读写（KPI 摘要 + 逐行错误），DB=根目录 dfv_history.db
   dashboard.py         生成单文件 DFV_Dashboard.html（KPI 卡片 + 可筛选行动表 + 趋势图 + 周选择器）
   databricks_lookup.py 对描述为代码的行，查 Databricks ps_psc_sku_master 补全 SKU 描述
-  app.py               Flask 内网编辑网站：GET / 渲染 Dashboard、GET /api/errors、POST /api/errors/<id> 存 owner/action_plan（参数化+校验+审计）
+  app.py               Flask 内网编辑网站：GET / 渲染 Dashboard、GET /api/errors、POST /api/errors/<id> 存 owner/action_plan（参数化+校验+审计）、POST /api/email/weekly 生成周报邮件
+  email_report.py      周报邮件：build_weekly_email 纯函数拼 HTML + load_recipients（读本地 gitignored email_config.json，模板见 email_config.example.json）+ open_outlook_draft（pywin32/Outlook COM，只 .Display() 绝不 .Send()）
   sync_owners.py       把人工在 Excel 改过的 Owner 列同步回 DB 再重生成 Dashboard
   manage_history.py    交互式列出/删除历史周次
   test_first_seen_sort.py  First Time/Duration 列与排序的对抗性测试
