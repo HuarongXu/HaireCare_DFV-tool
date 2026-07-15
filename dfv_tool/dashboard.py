@@ -112,6 +112,7 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
 
 .main { padding:14px 32px 48px; max-width:1600px; margin:0 auto; }
 .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:20px; }
+.chart-row-triple { grid-template-columns:repeat(3,1fr); }
 .chart-row-3 { grid-template-columns:repeat(3,1fr); }
 .chart-card { background:var(--card); border-radius:var(--radius); padding:18px 20px;
               box-shadow:var(--shadow-sm); border:1px solid var(--border); display:flex; flex-direction:column; }
@@ -200,7 +201,7 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
 <div class="main">
   <div id="snapshotArea">
     <div class="kpi-row" id="kpiRow"></div>
-    <div class="chart-row">
+    <div class="chart-row chart-row-triple">
     <div class="chart-card">
       <h3>Volume Difference % (18 Months) &mdash; Target &lt; 2%</h3>
       <canvas id="chartDiff"></canvas>
@@ -208,6 +209,10 @@ body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg)
     <div class="chart-card">
       <h3>Error SKU Count (13 Weeks)</h3>
       <canvas id="chartSKU"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>By Reason <span>(current week)</span></h3>
+      <canvas id="chartReason"></canvas>
     </div>
   </div>
 
@@ -307,7 +312,7 @@ for (var i = 0; i < DATA.length; i++) {
 
 var currentFilter = "all";
 var currentPriority = "all";
-var priorityChart = null, agingChart = null, ownerChart = null;
+var priorityChart = null, agingChart = null, ownerChart = null, reasonChart = null;
 
 // Inline plugins to draw value labels directly on the charts (no extra CDN).
 var doughnutLabels = {
@@ -441,6 +446,8 @@ function renderActions(errors) {
   renderAgingChart(ownerScoped);
   // By-Owner chart is a cross-owner overview -> always the full week, not faceted.
   renderOwnerChart(errors);
+  // Reason chart reflects current week distribution (all actionable items).
+  renderReasonChart(errors);
 
   // Table = both facets applied (priority AND owner).
   var filtered = priorityScoped.filter(function(e) {
@@ -697,6 +704,81 @@ function renderOwnerChart(items) {
         y: { grid: { display: false }, ticks: { font: { size: 11 } } } },
       onClick: function(e, els) { if (els.length) { setFilter(labels[els[0].index]); } } },
     plugins: [hbarLabels]
+  });
+}
+
+function renderReasonChart(items) {
+  var ctx = document.getElementById("chartReason");
+  if (!ctx || typeof Chart === "undefined") return;
+
+  // Group by non-empty reason text and keep top buckets readable.
+  var counts = {};
+  for (var i = 0; i < items.length; i++) {
+    var rs = (items[i].reason || "").trim();
+    if (!rs) continue;
+    counts[rs] = (counts[rs] || 0) + 1;
+  }
+
+  var entries = Object.keys(counts).map(function(k) { return [k, counts[k]]; });
+  entries.sort(function(a, b) { return b[1] - a[1]; });
+
+  var maxSlices = 6;
+  var labels = [];
+  var data = [];
+  var others = 0;
+  for (var j = 0; j < entries.length; j++) {
+    if (j < maxSlices) {
+      var label = entries[j][0];
+      labels.push(label.length > 28 ? (label.slice(0, 28) + "…") : label);
+      data.push(entries[j][1]);
+    } else {
+      others += entries[j][1];
+    }
+  }
+  if (others > 0) {
+    labels.push("Others");
+    data.push(others);
+  }
+
+  // Keep canvas valid even when there are no reasons yet.
+  if (labels.length === 0) {
+    labels = ["No Reason"];
+    data = [1];
+  }
+
+  if (reasonChart) reasonChart.destroy();
+  reasonChart = new Chart(ctx, {
+    type: "pie",
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#0ea5e9", "#8b5cf6", "#64748b"],
+        borderColor: "#fff",
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { usePointStyle: true, pointStyle: "circle", padding: 12, font: { size: 11 } }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              var total = context.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+              var v = context.parsed || 0;
+              var pct = total ? (v * 100 / total).toFixed(1) : "0.0";
+              return context.label + ": " + v + " (" + pct + "%)";
+            }
+          }
+        }
+      }
+    },
+    plugins: [doughnutLabels]
   });
 }
 

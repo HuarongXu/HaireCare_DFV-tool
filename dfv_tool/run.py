@@ -180,12 +180,92 @@ def step1_open_workbook():
     raise RuntimeError("Excel did not open within 120s")
 
 
+def _get_excel_app():
+    """Return a clean, late-bound Excel.Application from the ROT, or None.
+
+    Used as a fallback for COM property access (e.g. COMAddIns) that fails on
+    the dynamic Application proxy obtained via find_excel_by_workbook.
+    """
+    try:
+        return win32com.client.GetActiveObject("Excel.Application")
+    except Exception:
+        return None
+
+
+def ensure_ao_addin(xl):
+    """Make sure the SAP Analysis for Office COM add-in is loaded.
+
+    When Excel was force-closed during a prior hung run (or the add-in soft-
+    failed on startup), the Analysis ribbon does not appear even though the
+    add-in's registry LoadBehavior is 3. We reconnect it through the standard
+    COMAddIns API (progID 'SapExcelAddIn'), which loads the ribbon WITHOUT any
+    XLL/SAPExecuteCommand call, so it does not break the ribbon.
+
+    Returns True if the add-in is connected (or was reconnected), else False.
+    """
+    # The Application object handed in comes from the Running Object Table as a
+    # late-bound dynamic dispatch; reading .COMAddIns on it can raise
+    # "<unknown>.COMAddIns". Re-fetch a clean Excel.Application and retry a few
+    # times in case Excel is momentarily busy right after opening the workbook.
+    addins = None
+    for attempt in range(5):
+        for candidate in (xl, _get_excel_app()):
+            if candidate is None:
+                continue
+            try:
+                addins = candidate.COMAddIns
+                break
+            except Exception:
+                addins = None
+        if addins is not None:
+            break
+        time.sleep(2)
+
+    if addins is None:
+        log("  [addin] Cannot read COMAddIns (Excel busy?); skipping auto-load")
+        return False
+
+    sap = None
+    for a in addins:
+        try:
+            pid = (a.progID or "")
+        except Exception:
+            continue
+        if "Sap" in pid or "Analysis" in pid:
+            sap = a
+            break
+
+    if sap is None:
+        log("  [addin] SAP Analysis add-in not registered in this Excel")
+        return False
+
+    try:
+        if sap.Connect:
+            return True
+        log("  [addin] Analysis add-in not loaded -> connecting...")
+        sap.Connect = True
+        # Give Excel a moment to build the ribbon after connecting.
+        for _ in range(10):
+            time.sleep(1)
+            if sap.Connect:
+                log("  [addin] Analysis add-in connected")
+                return True
+        log("  [addin] Connect requested but add-in still not active")
+        return False
+    except Exception as e:
+        log(f"  [addin] Failed to connect Analysis add-in: {e}")
+        return False
+
+
 # ============================================================
 # STEP 2: Wait for AO ribbon
 # ============================================================
 def step2_wait_ao(xl):
     log("Step 2: Waiting for AO Analysis ribbon...")
     from pywinauto import Application
+
+    # Make sure the SAP add-in is actually loaded before waiting for its ribbon.
+    ensure_ao_addin(xl)
 
     # Get Excel window handle via win32gui (avoid COM for hwnd lookup)
     excel_hwnd = None
@@ -214,6 +294,8 @@ def step2_wait_ao(xl):
                     return main_win
         if attempt % 10 == 0 and attempt > 0:
             log(f"  Still waiting for Analysis ribbon... ({attempt*3}s)")
+            # Ribbon still missing after a while -> try reconnecting the add-in.
+            ensure_ao_addin(xl)
         time.sleep(3)
 
     raise RuntimeError("Analysis ribbon did not appear within 180s")

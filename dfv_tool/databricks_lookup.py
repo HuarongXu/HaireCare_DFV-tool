@@ -4,6 +4,7 @@ Enriches error rows that have code-like descriptions (Description == APO_Product
 by querying ps_psc_sku_master in Databricks.
 """
 import os
+import threading
 from dotenv import load_dotenv
 
 # Load .env from same directory
@@ -12,6 +13,10 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 DATABRICKS_HOST = os.getenv("DATABRICKS_HOST")
 DATABRICKS_HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH")
 DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN")
+
+# Description enrichment is optional; never let a proxy-level hang block the run.
+CONNECT_TIMEOUT = int(os.getenv("DATABRICKS_CONNECT_TIMEOUT", "15"))  # socket timeout (s)
+QUERY_TIMEOUT = int(os.getenv("DATABRICKS_QUERY_TIMEOUT", "30"))      # overall wall-clock (s)
 
 _QUERY = """
 SELECT material_num, product_name_en
@@ -42,11 +47,12 @@ def fetch_descriptions(material_nums):
     placeholders = ", ".join(["?" for _ in material_nums])
     query = _QUERY.format(placeholders=placeholders)
 
-    try:
+    def _run():
         with dbsql.connect(
             server_hostname=DATABRICKS_HOST,
             http_path=DATABRICKS_HTTP_PATH,
             access_token=DATABRICKS_TOKEN,
+            _socket_timeout=CONNECT_TIMEOUT,
         ) as conn:
             with conn.cursor() as cursor:
                 cursor.execute(query, material_nums)
@@ -57,11 +63,34 @@ def fetch_descriptions(material_nums):
                     desc = str(row[1]).strip() if row[1] else ""
                     if desc:
                         result[mat_num] = desc
-                print(f"  Databricks: fetched {len(result)} descriptions for {len(material_nums)} SKUs")
                 return result
-    except Exception as e:
-        print(f"WARNING: Databricks query failed: {e}")
+
+    # Run in a daemon thread so a proxy-level hang (no TCP timeout) can never
+    # block the pipeline forever. If it exceeds QUERY_TIMEOUT we abandon the
+    # lookup (description enrichment is optional) and let the run finish.
+    holder = {}
+
+    def _worker():
+        try:
+            holder["result"] = _run()
+        except Exception as e:  # noqa: BLE001 - reported below
+            holder["error"] = e
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    t.join(QUERY_TIMEOUT)
+
+    if t.is_alive():
+        print(f"WARNING: Databricks query timed out after {QUERY_TIMEOUT}s, "
+              f"skipping description lookup")
         return {}
+    if "error" in holder:
+        print(f"WARNING: Databricks query failed: {holder['error']}")
+        return {}
+
+    result = holder.get("result", {})
+    print(f"  Databricks: fetched {len(result)} descriptions for {len(material_nums)} SKUs")
+    return result
 
 
 def enrich_descriptions(errors_df):
