@@ -48,22 +48,43 @@ def fetch_descriptions(material_nums):
     query = _QUERY.format(placeholders=placeholders)
 
     def _run():
-        with dbsql.connect(
-            server_hostname=DATABRICKS_HOST,
-            http_path=DATABRICKS_HTTP_PATH,
-            access_token=DATABRICKS_TOKEN,
-            _socket_timeout=CONNECT_TIMEOUT,
-        ) as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(query, material_nums)
-                rows = cursor.fetchall()
-                result = {}
-                for row in rows:
-                    mat_num = str(row[0]).strip()
-                    desc = str(row[1]).strip() if row[1] else ""
-                    if desc:
-                        result[mat_num] = desc
-                return result
+        # The Azure China workspace enforces an IP allow-list. A corporate HTTP
+        # proxy egresses from an IP that is NOT on that list, so proxied requests
+        # fail with "Unauthorized network access to workspace". Connecting
+        # directly uses this machine's real (allow-listed) IP. Bypass the proxy
+        # for the duration of this connection only, then restore the env so other
+        # network access keeps using the proxy. Disable via DATABRICKS_BYPASS_PROXY=0.
+        bypass = os.getenv("DATABRICKS_BYPASS_PROXY", "1") != "0"
+        _proxy_keys = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
+        _saved = {k: os.environ.get(k) for k in (*_proxy_keys, "NO_PROXY", "no_proxy")}
+        if bypass:
+            for k in _proxy_keys:
+                os.environ.pop(k, None)
+            os.environ["NO_PROXY"] = "*"
+            os.environ["no_proxy"] = "*"
+        try:
+            with dbsql.connect(
+                server_hostname=DATABRICKS_HOST,
+                http_path=DATABRICKS_HTTP_PATH,
+                access_token=DATABRICKS_TOKEN,
+                _socket_timeout=CONNECT_TIMEOUT,
+            ) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query, material_nums)
+                    rows = cursor.fetchall()
+                    result = {}
+                    for row in rows:
+                        mat_num = str(row[0]).strip()
+                        desc = str(row[1]).strip() if row[1] else ""
+                        if desc:
+                            result[mat_num] = desc
+                    return result
+        finally:
+            for k, v in _saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
 
     # Run in a daemon thread so a proxy-level hang (no TCP timeout) can never
     # block the pipeline forever. If it exceeds QUERY_TIMEOUT we abandon the
