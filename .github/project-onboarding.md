@@ -21,7 +21,7 @@
 | 目的 | 命令 |
 |------|------|
 | 一键运行（Windows，推荐） | 双击 `start_dfv.bat`（自建/校验 `.venv` → 装依赖 → 跑 `run.py` → 失败回退 `pipeline.py` → 开 Dashboard） |
-| 启动内网编辑网站 | 双击 `start_web.bat` 或 `python dfv_tool/app.py`（Flask+waitress，http://localhost:8000，可在网页直接改 Owner/Action Plan 存库） |
+| 启动内网编辑网站 | 双击 `start_web.bat` 或 `python dfv_tool/app.py`（Flask+waitress，http://localhost:8060，可在网页直接改 Owner/Action Plan 存库） |
 | 装依赖 | `pip install -r requirements.txt` |
 | 全流程（含 SAP AO 自动化） | `python dfv_tool/run.py` |
 | 仅数据管线（用已有 CSV，无需 SAP） | `python dfv_tool/pipeline.py` |

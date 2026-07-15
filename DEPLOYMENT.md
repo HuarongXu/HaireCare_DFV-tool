@@ -56,7 +56,7 @@ pip install -r requirements.txt
 python dfv_tool/run.py
 
 :: 5) 起网页看板（在线编辑 Owner/Action Plan + 生成周报邮件）
-python dfv_tool/app.py   ::  → http://localhost:8000  /  操作手册在 /manual
+python dfv_tool/app.py   ::  → http://localhost:8060  /  操作手册在 /manual
 ```
 
 ---
@@ -69,7 +69,7 @@ python dfv_tool/app.py   ::  → http://localhost:8000  /  操作手册在 /manu
 .venv\Scripts\python.exe dfv_tool\test_editable_actionplan.py
 .venv\Scripts\python.exe dfv_tool\test_first_seen_sort.py
 
-:: 网页冒烟：起 app.py 后浏览器打开 http://localhost:8000 与 /manual
+:: 网页冒烟：起 app.py 后浏览器打开 http://localhost:8060 与 /manual
 ```
 
 三个测试全绿 + 网页能打开 = 代码环境就绪。之后 SAP 部分是否成功，取决于第 2/3 步的 AO/工作簿/Variant 是否到位。

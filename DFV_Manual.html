@@ -391,7 +391,7 @@ D767, D901, E295, E496, E467, E474, 5740, E230, D594</code></pre>
     <tr><th>场景</th><th>方法</th><th>位置</th></tr>
     <tr><td>改固定规则（影响未来所有 run）</td><td>修改 config.py</td><td><span class="inline-code">FIXED_OWNERS</span>, <span class="inline-code">LOCATION_OWNERS</span>, <span class="inline-code">HKTW_LOCATIONS</span></td></tr>
     <tr><td>改单次结果（每个 item 不同人）</td><td>编辑 Excel → Sync 回 DB</td><td>编辑 <span class="inline-code">output/DFV_actions_*.xlsx</span> 的 Owner 列，然后运行 <span class="inline-code">python dfv_tool/sync_owners.py</span></td></tr>
-    <tr><td>改单次结果（直接在网页改，推荐）</td><td>网页「允许编辑」→ 直接改 Owner</td><td>运行 <span class="inline-code">python dfv_tool/app.py</span> 打开 <span class="inline-code">http://localhost:8000</span>，开启「允许编辑」开关后修改，自动存 DB（详见「网页编辑 &amp; 周报邮件」章节）</td></tr>
+    <tr><td>改单次结果（直接在网页改，推荐）</td><td>网页「允许编辑」→ 直接改 Owner</td><td>运行 <span class="inline-code">python dfv_tool/app.py</span> 打开 <span class="inline-code">http://localhost:8060</span>，开启「允许编辑」开关后修改，自动存 DB（详见「网页编辑 &amp; 周报邮件」章节）</td></tr>
   </table>
 </section>
 
@@ -636,7 +636,7 @@ python -c "from dashboard import generate_dashboard; generate_dashboard()"</code
   <div class="alert alert-info">
     <div class="alert-title">&#128640; 启动网页服务</div>
     <pre><code>python dfv_tool/app.py</code></pre>
-    <p>启动后浏览器打开 <span class="inline-code">http://localhost:8000</span>（同一内网他人可用本机 IP 访问，如 <span class="inline-code">http://143.35.x.x:8000</span>）。</p>
+    <p>启动后浏览器打开 <span class="inline-code">http://localhost:8060</span>（同一内网他人可用本机 IP 访问，如 <span class="inline-code">http://143.35.x.x:8060</span>）。</p>
   </div>
 
   <h3>9.1 在线编辑 Owner / Action Plan</h3>
