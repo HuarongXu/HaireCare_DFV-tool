@@ -801,7 +801,7 @@ function renderCharts() {
       ]
     },
     options: { responsive: true, plugins: { legend: { position: "bottom" } },
-               scales: { y: { min: 0.2, ticks: { stepSize: 0.1 }, title: { display: true, text: "%" } } } }
+               scales: { y: { beginAtZero: true, min: 0, ticks: { stepSize: 0.1 }, title: { display: true, text: "%" } } } }
   });
 
   new Chart(document.getElementById("chartSKU"), {

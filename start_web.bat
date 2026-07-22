@@ -15,6 +15,11 @@ set /p HOST_IP=<"%TEMP%\_dfv_ip.txt"
 del "%TEMP%\_dfv_ip.txt" >nul 2>&1
 if "%HOST_IP%"=="" set "HOST_IP=localhost"
 
+rem --- Kill any stale server still holding port 8060 (avoids multiple ---
+rem --- instances serving old code after the window was closed uncleanly). ---
+echo [INFO] Freeing port 8060 (stopping any previous DFV server)...
+powershell -NoProfile -Command "$pids = Get-NetTCPConnection -LocalPort 8060 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; foreach ($procId in $pids) { try { Stop-Process -Id $procId -Force -ErrorAction Stop; Write-Host ('[INFO] Stopped old server PID ' + $procId) } catch { Write-Host ('[WARN] Could not stop PID ' + $procId + ' - ' + $_.Exception.Message) } }"
+
 echo.
 echo [INFO] Starting DFV web app...
 echo [INFO] This computer's address:  http://%HOST_IP%:8060
