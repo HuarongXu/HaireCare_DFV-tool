@@ -164,15 +164,23 @@ def open_outlook_draft(subject, to, cc, html, inline_images=None):
     matching <img src="cid:..."> in the body resolves. Temp files are removed
     once the draft is created (Outlook copies the bytes into the item)."""
     import tempfile
+    import pythoncom  # lazy import (R11/R13)
     import win32com.client  # lazy import (R11/R13)
-    outlook = win32com.client.Dispatch("Outlook.Application")
-    mail = outlook.CreateItem(0)  # 0 = olMailItem
-    mail.Subject = subject
-    mail.To = "; ".join(to or [])
-    mail.CC = "; ".join(cc or [])
 
+    # Waitress serves each request on a pooled worker thread. COM must be
+    # initialized on whichever thread runs Dispatch, otherwise the 2nd+ request
+    # lands on an uninitialized thread and fails with "CoInitialize has not been
+    # called". Initialize here and uninitialize in finally so every call is
+    # thread-safe regardless of which worker handles it.
+    pythoncom.CoInitialize()
     tmp_paths = []
     try:
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        mail = outlook.CreateItem(0)  # 0 = olMailItem
+        mail.Subject = subject
+        mail.To = "; ".join(to or [])
+        mail.CC = "; ".join(cc or [])
+
         for content_id, data in (inline_images or []):
             fd, path = tempfile.mkstemp(suffix=".png")
             os.close(fd)
@@ -191,3 +199,4 @@ def open_outlook_draft(subject, to, cc, html, inline_images=None):
                 os.remove(p)
             except OSError:
                 pass
+        pythoncom.CoUninitialize()
